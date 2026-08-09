@@ -13,21 +13,36 @@ sudo apt install ffmpeg
 uv sync
 ```
 
+Komutu her dizinden kullanabilmek için sisteme kur. `--editable` sayesinde
+depoda yaptığın değişiklikler anında geçerli olur, yeniden kurmak gerekmez:
+
+```bash
+uv tool install --editable .
+```
+
+Bu, `~/.local/bin/pakize` çalıştırılabilirini oluşturur. Kaldırmak için:
+`uv tool uninstall pakize`.
+
 ## Kullanım
 
 ```bash
 # Dosyadan
-uv run pakize speak notlar.md
+pakize speak notlar.md
+
+# Panodan (X11)
+xclip -o -selection clipboard | pakize speak
 
 # Borudan
-xclip -o -selection clipboard | uv run pakize speak
+echo "Okunacak metin" | pakize speak
 
 # Ses üretmeden neyin okunacağını gör
-uv run pakize speak notlar.md --dry-run
+pakize speak notlar.md --dry-run
 
 # Belirli bir dosyaya yaz, otomatik çalma
-uv run pakize speak notlar.md -o cikti.mp3 --no-play
+pakize speak notlar.md -o cikti.mp3 --no-play
 ```
+
+> Sisteme kurmadıysan komutların başına `uv run` ekle ve proje dizininden çalıştır.
 
 Çıktı yolu verilmezse ses `~/.local/share/pakize/<tarih-saat>.mp3` altına yazılır
 ve hemen çalmaya başlar.
@@ -46,9 +61,9 @@ ve hemen çalmaya başlar.
 ### Diğer komutlar
 
 ```bash
-uv run pakize voices              # Türkçe sesleri listele
-uv run pakize voices -l all       # tüm dilleri listele
-uv run pakize config              # etkin ayarları göster
+pakize voices              # Türkçe sesleri listele
+pakize voices -l all       # tüm dilleri listele
+pakize config              # etkin ayarları göster
 ```
 
 ## Yapılandırma
