@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 import subprocess
 from pathlib import Path
@@ -59,8 +60,37 @@ def concat(parts: list[Path], destination: Path) -> Path:
 
 def play(path: Path) -> None:
     """Ses dosyasını ffplay ile, pencere açmadan ve sonunda kapanacak şekilde çalar."""
+    _run(_play_command(path))
+
+
+async def play_async(path: Path) -> None:
+    """`play` ile aynı iş; olay döngüsünü bloklamaz.
+
+    Akıcı çalmada üretim ve çalma aynı anda sürdüğü için gereklidir.
+    """
+    command = _play_command(path)
+    process = await asyncio.create_subprocess_exec(
+        *command, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE
+    )
+    _, stderr = await process.communicate()
+    if process.returncode != 0:
+        raise AudioError(
+            f"ffplay hata verdi (kod {process.returncode}): "
+            f"{stderr.decode(errors='replace').strip()}"
+        )
+
+
+def _play_command(path: Path) -> list[str]:
     ffplay = _require_binary("ffplay")
-    _run([ffplay, "-nodisp", "-autoexit", "-hide_banner", "-loglevel", "error", str(path)])
+    return [
+        ffplay,
+        "-nodisp",
+        "-autoexit",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        str(path),
+    ]
 
 
 def _quote(path: Path) -> str:

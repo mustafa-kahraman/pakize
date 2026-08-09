@@ -12,7 +12,7 @@ import asyncio
 import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Callable
+from typing import Awaitable, Callable
 
 from .audio import concat
 from .chunking import build_chunks
@@ -30,6 +30,13 @@ servisi zorlamamak ve hız sınırına takılmamak içindir.
 
 ProgressCallback = Callable[[int, int], None]
 """(tamamlanan, toplam) parça sayısıyla çağrılır."""
+
+PartReadyCallback = Callable[[Path], Awaitable[None]]
+"""Hazır olan her ses parçası için, **parça sırasına göre** beklenerek çağrılır.
+
+Akıcı çalmayı bu geri çağrı sağlar; boru hattı ses çalmayı bilmez, yalnızca
+sırayı garanti eder.
+"""
 
 
 @dataclass(frozen=True)
@@ -70,9 +77,12 @@ def synthesize(
     destination: Path,
     config: Config,
     progress: ProgressCallback | None = None,
+    on_part_ready: PartReadyCallback | None = None,
 ) -> SpeechResult:
     """Metni sese çevirip `destination` yoluna yazar (eşzamanlı sarmalayıcı)."""
-    return asyncio.run(synthesize_async(text, destination, config, progress))
+    return asyncio.run(
+        synthesize_async(text, destination, config, progress, on_part_ready)
+    )
 
 
 async def synthesize_async(
@@ -80,6 +90,7 @@ async def synthesize_async(
     destination: Path,
     config: Config,
     progress: ProgressCallback | None = None,
+    on_part_ready: PartReadyCallback | None = None,
 ) -> SpeechResult:
     plan = plan_speech(text, config)
     if not plan.chunks:
@@ -91,7 +102,9 @@ async def synthesize_async(
     last_error: EngineError | None = None
     for engine_name in _engine_order(config):
         try:
-            await _render_with_engine(engine_name, plan, destination, config, progress)
+            await _render_with_engine(
+                engine_name, plan, destination, config, progress, on_part_ready
+            )
         except EngineError as exc:
             last_error = exc
             continue
@@ -115,8 +128,14 @@ async def _render_with_engine(
     destination: Path,
     config: Config,
     progress: ProgressCallback | None,
+    on_part_ready: PartReadyCallback | None,
 ) -> None:
-    """Tüm parçaları tek bir motorla seslendirip birleştirir."""
+    """Tüm parçaları tek bir motorla seslendirip birleştirir.
+
+    Parçalar paralel üretilir; `on_part_ready` verilmişse üretim sürerken
+    hazır olanlar sırayla tüketilir. Böylece uzun metinlerde ilk sese kadar
+    beklenen süre, tüm metnin değil yalnızca ilk parçanın süresidir.
+    """
     engine = create_engine(engine_name, replace(config, engine=engine_name))
     engine.ensure_available()
 
@@ -135,8 +154,31 @@ async def _render_with_engine(
                 progress(completed, len(plan.chunks))
             return part
 
-        parts = await asyncio.gather(*(render(chunk) for chunk in plan.chunks))
-        concat(list(parts), destination)
+        # Görevler burada başlar; aşağıdaki sıralı tüketim üretimi beklemez.
+        tasks = [asyncio.create_task(render(chunk)) for chunk in plan.chunks]
+        try:
+            parts = await _collect(tasks, on_part_ready)
+        except BaseException:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+
+        concat(parts, destination)
+
+
+async def _collect(
+    tasks: list[asyncio.Task],
+    on_part_ready: PartReadyCallback | None,
+) -> list[Path]:
+    """Parçaları sırayla toplar, her biri hazır oldukça geri çağrıyı bekler."""
+    parts: list[Path] = []
+    for task in tasks:
+        part = await task
+        parts.append(part)
+        if on_part_ready is not None:
+            await on_part_ready(part)
+    return parts
 
 
 __all__ = [

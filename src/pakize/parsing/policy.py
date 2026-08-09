@@ -14,11 +14,18 @@ import re
 
 from ..config import Config
 from ..models import Action, Segment, SegmentType
+from .text import normalize_decimals
 
 _MD_IMAGE_RE = re.compile(r"!\[(?P<alt>[^\]]*)\]\([^)]*\)")
 _MD_LINK_RE = re.compile(r"\[(?P<text>[^\]]+)\]\((?P<url>[^)]*)\)")
 _INLINE_CODE_RE = re.compile(r"`+(?P<code>[^`]+)`+")
 _BARE_URL_RE = re.compile(r"<?\b(?:https?://|www\.)[^\s<>()\[\]]+>?")
+# Dosya yolu: en az bir eğik çizgi içeren ve son bileşeni uzantılı olan dizi.
+# Uzantı şartı "ve/veya", "TR/EN" gibi ifadelerin yol sanılmasını; öndeki
+# lookbehind ise URL'lerin içinden parça kapılmasını önler.
+_FILE_PATH_RE = re.compile(
+    r"(?<![\w/.])[\w.~-]*(?:/[\w.-]+)*/(?P<name>[\w-]+\.[A-Za-z]\w{0,7})(?![\w/])"
+)
 _EMPHASIS_RE = re.compile(r"(\*{1,3}|~{2})(?=\S)(.+?)(?<=\S)\1", re.DOTALL)
 # Alt çizgili vurgu yalnızca kelime sınırlarında geçerlidir; aksi hâlde
 # `build_chunks` gibi snake_case tanımlayıcılar parçalanırdı.
@@ -64,6 +71,7 @@ _LANGUAGE_NAMES = {
 _INLINE_ANNOUNCEMENTS = {
     SegmentType.INLINE_CODE: "bir kod parçası",
     SegmentType.URL: "bir bağlantı",
+    SegmentType.FILE_PATH: "bir dosya yolu",
 }
 
 
@@ -176,9 +184,26 @@ def _normalize_inline(
     )
     _tally(skipped, SegmentType.URL, count)
 
+    # URL'lerden sonra gelmeli: aksi hâlde bağlantı adreslerinin içindeki
+    # `/dosya.html` parçaları yol sanılırdı. Bu tipte READ, yolun tamamını
+    # değil yalnızca dosya adını okumak demektir; "es-er-se bölü pakize bölü
+    # models nokta pe ye" dinlenebilir bir şey değil.
+    text, count = _substitute_inline(
+        _FILE_PATH_RE,
+        text,
+        config.policy.get(SegmentType.FILE_PATH, Action.READ),
+        SegmentType.FILE_PATH,
+        lambda m: m.group("name"),
+    )
+    _tally(skipped, SegmentType.FILE_PATH, count)
+
     text = _EMPHASIS_RE.sub(lambda m: m.group(2), text)
     text = _UNDERSCORE_EMPHASIS_RE.sub(lambda m: m.group(2), text)
     text = _LEFTOVER_MARKS_RE.sub("", text)
+
+    if config.normalize_decimals:
+        text = normalize_decimals(text)
+
     return _WHITESPACE_RE.sub(" ", text).strip(), skipped
 
 

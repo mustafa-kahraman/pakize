@@ -29,6 +29,7 @@ _SEGMENT_LABELS = {
     SegmentType.CODE_BLOCK: "kod bloğu",
     SegmentType.TABLE: "tablo",
     SegmentType.URL: "bağlantı",
+    SegmentType.FILE_PATH: "dosya yolu",
     SegmentType.INLINE_CODE: "satır içi kod",
     SegmentType.HORIZONTAL_RULE: "yatay çizgi",
 }
@@ -54,6 +55,11 @@ def speak(
     play: bool = typer.Option(
         True, "--play/--no-play", help="Ses hazır olunca otomatik çal."
     ),
+    stream: bool = typer.Option(
+        None,
+        "--stream/--no-stream",
+        help="Parçaları hazır oldukça çal; hepsinin bitmesini bekleme.",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Ses üretmeden neyin okunacağını göster."
     ),
@@ -64,15 +70,23 @@ def speak(
         typer.secho("Girdi boş.", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    config = _resolved_config(voice=voice, rate=rate, engine=engine)
+    config = _resolved_config(voice=voice, rate=rate, engine=engine, stream=stream)
 
     if dry_run:
         _print_plan(text, config)
         return
 
-    destination = output or _default_output_path()
+    destination = output or _default_output_path(config)
+    # Akıcı modda parçalar üretildikçe çalınır; sonda ikinci kez çalmayız.
+    streaming = play and config.stream
     try:
-        result = synthesize(text, destination, config, progress=_progress)
+        result = synthesize(
+            text,
+            destination,
+            config,
+            progress=_progress,
+            on_part_ready=audio.play_async if streaming else None,
+        )
     except EngineError as exc:
         typer.secho(f"\nHata: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
@@ -89,8 +103,35 @@ def speak(
             fg=typer.colors.YELLOW,
         )
 
-    if play:
+    if play and not streaming:
         audio.play(result.output)
+
+
+@app.command()
+def son(
+    listele: bool = typer.Option(
+        False, "--list", "-l", help="Çalmak yerine son üretilen sesleri listele."
+    ),
+    adet: int = typer.Option(10, "--count", "-n", help="Listelenecek kayıt sayısı."),
+) -> None:
+    """En son üretilen ses dosyasını yeniden çalar."""
+    config = _resolved_config()
+    kayitlar = _recent_outputs(config)
+
+    if not kayitlar:
+        typer.secho(
+            f"{config.output_dir} içinde ses dosyası yok.", fg=typer.colors.YELLOW
+        )
+        raise typer.Exit(code=1)
+
+    if listele:
+        for path in kayitlar[:adet]:
+            an = datetime.fromtimestamp(path.stat().st_mtime)
+            typer.echo(f"{an:%Y-%m-%d %H:%M:%S}  {path}")
+        return
+
+    typer.echo(f"Çalınıyor: {kayitlar[0]}")
+    audio.play(kayitlar[0])
 
 
 @app.command()
@@ -124,6 +165,11 @@ def show_config() -> None:
     typer.echo(f"Ses            : {config.voice}")
     typer.echo(f"Hız            : {config.rate} ({config.rate_percent()})")
     typer.echo(f"Parça sınırı   : {config.max_chunk_chars} karakter")
+    typer.echo(f"Çıktı dizini   : {config.output_dir}")
+    typer.echo(f"Akıcı çalma    : {'açık' if config.stream else 'kapalı'}")
+    typer.echo(
+        f"Ondalık düzelt : {'açık' if config.normalize_decimals else 'kapalı'}"
+    )
     typer.echo("Politika:")
     for segment_type, action in sorted(config.policy.items(), key=lambda kv: kv[0].value):
         typer.echo(f"  {segment_type.value:<18} {action.value}")
@@ -142,24 +188,46 @@ def _read_source(source: Path | None) -> str:
     return sys.stdin.read()
 
 
-def _resolved_config(voice: str | None, rate: float | None, engine: str | None) -> Config:
+def _resolved_config(
+    voice: str | None = None,
+    rate: float | None = None,
+    engine: str | None = None,
+    stream: bool | None = None,
+) -> Config:
     """Dosyadan gelen ayarları CLI bayraklarıyla ezer."""
     config = load_config()
     overrides = {
         key: value
-        for key, value in (("voice", voice), ("rate", rate), ("engine", engine))
+        for key, value in (
+            ("voice", voice),
+            ("rate", rate),
+            ("engine", engine),
+            ("stream", stream),
+        )
         if value is not None
     }
     return replace(config, **overrides) if overrides else config
 
 
-def _default_output_path() -> Path:
-    """Çıktı verilmediğinde kullanılacak, zaman damgalı kalıcı yol.
+def _default_output_path(config: Config) -> Path:
+    """Çıktı verilmediğinde kullanılacak, zaman damgalı yol.
 
-    Çalışma dizinini kirletmemek için XDG veri dizinine yazarız.
+    Çalışma dizinini kirletmemek için config'teki çıktı dizinine yazarız.
     """
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    return Path.home() / ".local" / "share" / "pakize" / f"{stamp}.mp3"
+    return config.output_dir / f"{stamp}.mp3"
+
+
+def _recent_outputs(config: Config) -> list[Path]:
+    """Çıktı dizinindeki ses dosyalarını en yeniden eskiye sıralar."""
+    if not config.output_dir.is_dir():
+        return []
+    sesler = [
+        path
+        for path in config.output_dir.iterdir()
+        if path.is_file() and path.suffix.lower() in (".mp3", ".wav")
+    ]
+    return sorted(sesler, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
 def _progress(done: int, total: int) -> None:

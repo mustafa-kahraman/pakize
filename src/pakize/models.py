@@ -32,6 +32,9 @@ class SegmentType(str, Enum):
     URL = "url"
     """Çıplak URL veya Markdown bağlantı hedefi."""
 
+    FILE_PATH = "file_path"
+    """Metin içinde geçen dosya yolu (`src/pakize/models.py` gibi)."""
+
     TABLE = "table"
     """Markdown tablosu."""
 

@@ -186,6 +186,81 @@ def test_tamamen_atlanan_metin_anlamli_hata_verir(
         pipeline.synthesize("```py\nx = 1\n```", tmp_path / "ses.txt", config)
 
 
+def test_akici_modda_parcalar_sirayla_tuketilir(
+    tmp_path, config, motorlar, sahte_concat
+):
+    config = replace(config, max_chunk_chars=20)
+    calinanlar: list[str] = []
+
+    async def calindi(part):
+        calinanlar.append(part.read_text(encoding="utf-8"))
+
+    pipeline.synthesize(
+        "Birinci cümle. İkinci cümle. Üçüncü cümle.",
+        tmp_path / "ses.txt",
+        config,
+        on_part_ready=calindi,
+    )
+
+    assert len(calinanlar) == 3
+    assert calinanlar[0].startswith("Birinci")
+    assert calinanlar[-1].startswith("Üçüncü")
+
+
+def test_akici_mod_ilk_parcayi_uretim_bitmeden_verir(
+    tmp_path, config, monkeypatch, sahte_concat
+):
+    """İlk parça, son parça daha üretilmeden tüketiciye ulaşmalı."""
+    import asyncio
+
+    class YavasSonMotor(SahteMotor):
+        name = "yavas"
+
+        async def synthesize(self, text: str, destination: Path) -> None:
+            # Son parça bilerek geciktirilir; akıcı mod ilk parçayı beklememeli.
+            if text.startswith("Üçüncü"):
+                await asyncio.sleep(0.05)
+                self.son_bitti = True
+            destination.write_text(text, encoding="utf-8")
+
+    motor = YavasSonMotor(config)
+    monkeypatch.setattr(pipeline, "create_engine", lambda name, cfg: motor)
+    config = replace(config, max_chunk_chars=20)
+
+    ilk_parcada_son_bitmis: list[bool] = []
+
+    async def calindi(part):
+        if not ilk_parcada_son_bitmis:
+            ilk_parcada_son_bitmis.append(getattr(motor, "son_bitti", False))
+
+    pipeline.synthesize(
+        "Birinci cümle. İkinci cümle. Üçüncü cümle.",
+        tmp_path / "ses.txt",
+        config,
+        on_part_ready=calindi,
+    )
+
+    assert ilk_parcada_son_bitmis == [False]
+
+
+def test_akici_modda_hata_bekleyen_gorevleri_iptal_eder(
+    tmp_path, config, motorlar, sahte_concat
+):
+    """Tüketici patlarsa arkada üretmeye devam eden görevler askıda kalmamalı."""
+    config = replace(config, max_chunk_chars=20)
+
+    async def patla(part):
+        raise RuntimeError("çalma bozuldu")
+
+    with pytest.raises(RuntimeError, match="çalma bozuldu"):
+        pipeline.synthesize(
+            "Birinci cümle. İkinci cümle. Üçüncü cümle.",
+            tmp_path / "ses.txt",
+            config,
+            on_part_ready=patla,
+        )
+
+
 def test_motor_ag_hatasinda_yedege_dusulur(tmp_path, config, monkeypatch, sahte_concat):
     class AgKopukMotor(SahteMotor):
         name = "kopuk"

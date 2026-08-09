@@ -44,8 +44,10 @@ pakize speak notlar.md -o cikti.mp3 --no-play
 
 > Sisteme kurmadıysan komutların başına `uv run` ekle ve proje dizininden çalıştır.
 
-Çıktı yolu verilmezse ses `~/.local/share/pakize/<tarih-saat>.mp3` altına yazılır
-ve hemen çalmaya başlar.
+Çıktı yolu verilmezse ses `/tmp/pakize/<tarih-saat>.mp3` altına yazılır ve hemen
+çalmaya başlar. Sesler orada birikir; ileride lazım olan bir kaydı oradan
+alabilirsin. `/tmp` yeniden başlatmada temizlendiği için kalıcı arşiv istiyorsan
+`output_dir` ayarını değiştir.
 
 ### Bayraklar
 
@@ -56,15 +58,28 @@ ve hemen çalmaya başlar.
 | `-r, --rate` | Konuşma hızı çarpanı (örn. `1.15`) |
 | `-e, --engine` | Kullanılacak motor |
 | `--no-play` | Ses hazır olunca otomatik çalma |
+| `--no-stream` | Parçaları beklet, hepsi bitince tek seferde çal |
 | `--dry-run` | Ses üretmeden okunacak metni göster |
 
 ### Diğer komutlar
 
 ```bash
+pakize son                 # en son üretilen sesi yeniden çal
+pakize son --list          # son üretilen sesleri tarihiyle listele
+pakize son --list -n 30    # daha fazlasını göster
 pakize voices              # Türkçe sesleri listele
 pakize voices -l all       # tüm dilleri listele
 pakize config              # etkin ayarları göster
 ```
+
+### Akıcı çalma
+
+Varsayılan olarak ses, **ilk parça hazır olur olmaz** çalmaya başlar; kalan
+parçalar arkadan üretilmeye devam eder. Uzun bir metinde ilk sese kadar
+beklediğin süre, metnin tamamının değil yalnızca ilk parçanın süresidir.
+
+Arşiv dosyası yine eksiksiz yazılır. Sesin baştan sona tek parça çalmasını
+istersen `--no-stream` kullan veya config'te `stream = false` yaz.
 
 ## Yapılandırma
 
@@ -77,6 +92,9 @@ rate = 1.15                      # 1.0 = normal; ara değerler serbest (1.12 olu
 volume = 1.0
 pitch_hz = 0
 max_chunk_chars = 2500           # bir TTS isteğine sığdırılacak azami karakter
+output_dir = "/tmp/pakize"       # çıktı yolu verilmediğinde seslerin biriktiği yer
+stream = true                    # ilk parça hazır olunca çalmaya başla
+normalize_decimals = true        # 1.15 → 1,15 (Türkçe ondalık okunuşu)
 
 [policy]
 # Her segment tipi için: "read" (oku), "announce" (anons et), "skip" (atla)
@@ -84,6 +102,7 @@ code_block      = "announce"
 table           = "announce"
 url             = "skip"
 horizontal_rule = "skip"
+file_path       = "read"
 inline_code     = "read"
 prose           = "read"
 heading         = "read"
@@ -100,6 +119,33 @@ quote           = "read"
 Böylece kodun kendisi okunmaz ama bağlam kaybolmaz. `skip` seçersen blok
 tamamen atlanır. Satır içi `kod` ve bağlantılar cümlenin akışını bozmadan,
 yerinde dönüştürülür.
+
+### Dosya yolları
+
+`file_path` tipinde `read`, yolun tamamını değil **yalnızca dosya adını** okumak
+demektir:
+
+| Metinde | Okunan |
+|---------|--------|
+| `src/pakize/models.py` | "models.py" |
+| `~/.config/pakize/config.toml` | "config.toml" |
+
+"es-er-se bölü pakize bölü models nokta pe ye" dinlenebilir bir şey değil.
+Yolun tamamen atlanmasını istersen `file_path = "skip"` yaz.
+
+Yol sayılmak için en az bir `/` ve uzantılı bir son bileşen gerekir; bu sayede
+`ve/veya` ya da `TR/EN` gibi ifadeler bozulmaz.
+
+## Ondalık sayılar
+
+Türkçe'de ondalık ayracı virgüldür. `1.15` yazımı TTS motoruna Türkçe
+kurallarıyla gittiğinde yanlış okunur, bu yüzden `1,15`'e çevrilir.
+
+Sürüm numaraları da aynı kalıba uyar: `Python 3.10` → "üç virgül on". İkisini
+metne bakarak ayırmanın yolu yok. Sürüm numaraları senin için daha önemliyse
+`normalize_decimals = false` yaz.
+
+`1.2.3`, `192.168.1.1` ve `09.08.2026` gibi çok noktalı ifadelere dokunulmaz.
 
 ## Hız hakkında
 

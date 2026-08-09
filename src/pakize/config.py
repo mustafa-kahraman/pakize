@@ -33,8 +33,12 @@ DEFAULT_POLICY: dict[SegmentType, Action] = {
     SegmentType.CODE_BLOCK: Action.ANNOUNCE,
     SegmentType.TABLE: Action.ANNOUNCE,
     SegmentType.URL: Action.SKIP,
+    SegmentType.FILE_PATH: Action.READ,
     SegmentType.HORIZONTAL_RULE: Action.SKIP,
 }
+
+DEFAULT_OUTPUT_DIR = Path("/tmp/pakize")
+"""Çıktı yolu verilmediğinde seslerin yazıldığı dizin."""
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,15 @@ class Config:
 
     max_chunk_chars: int = 2500
     """Bir TTS isteğine sığdırılacak azami karakter sayısı."""
+
+    output_dir: Path = DEFAULT_OUTPUT_DIR
+    """Çıktı yolu verilmediğinde seslerin biriktiği dizin."""
+
+    normalize_decimals: bool = True
+    """Ondalık sayılardaki noktayı virgüle çevir (Türkçe okunuş için)."""
+
+    stream: bool = True
+    """Parçalar hazır oldukça sırayla çal; hepsinin bitmesini bekleme."""
 
     policy: dict[SegmentType, Action] = field(
         default_factory=lambda: dict(DEFAULT_POLICY)
@@ -119,6 +132,8 @@ def _apply_overrides(base: Config, data: dict) -> Config:
         "pitch_hz": int,
         "volume": float,
         "max_chunk_chars": int,
+        "normalize_decimals": bool,
+        "stream": bool,
     }
 
     overrides: dict = {}
@@ -126,8 +141,9 @@ def _apply_overrides(base: Config, data: dict) -> Config:
         if key in data and data[key] is not None:
             overrides[key] = caster(data[key])
 
-    if "piper_model" in data and data["piper_model"]:
-        overrides["piper_model"] = Path(str(data["piper_model"])).expanduser()
+    for key in ("piper_model", "output_dir"):
+        if data.get(key):
+            overrides[key] = Path(str(data[key])).expanduser()
 
     policy_table = data.get("policy")
     if isinstance(policy_table, dict):
