@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# uv
+.uv-cache/
+
+# Yerel ayarlar ve gizli değerler
+.env
+
+# Üretilen ses dosyaları
+*.mp3
+*.wav

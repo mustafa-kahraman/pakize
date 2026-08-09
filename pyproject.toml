@@ -1,0 +1,31 @@
+[project]
+name = "pakize"
+version = "0.1.0"
+description = "Metni ses dosyasına çeviren, kod bloklarını okumayan yerel TTS aracı"
+readme = "README.md"
+authors = [
+    { name = "Mustafa K...", email = "mustafa@3hz.net" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "edge-tts>=7.2.8",
+    "tomli>=2.0 ; python_full_version < '3.11'",
+    "typer>=0.27.1",
+]
+
+[project.scripts]
+pakize = "pakize.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
