@@ -16,7 +16,7 @@ from pathlib import Path
 
 import typer
 
-from . import audio, runtime
+from . import audio, book, runtime
 from .config import Config, config_path, load_config, write_default_config
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
@@ -166,6 +166,82 @@ def speak(
         except KeyboardInterrupt:
             typer.secho("\nDurduruldu.", fg=typer.colors.YELLOW)
             raise typer.Exit(code=130) from None
+
+
+@app.command()
+def kitap(
+    source: Path = typer.Argument(
+        ...,
+        help="Seslendirilecek kitap (.txt, .md, .epub, .pdf, .mobi ...).",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+    ),
+    output: Path = typer.Option(
+        None, "--output", "-o", help="Bölümlerin yazılacağı dizin."
+    ),
+    voice: str = typer.Option(None, "--voice", "-v", help="TTS sesi."),
+    rate: float = typer.Option(None, "--rate", "-r", help="Konuşma hızı çarpanı."),
+    engine: str = typer.Option(None, "--engine", "-e", help="Kullanılacak motor."),
+    level: int = typer.Option(
+        book.DEFAULT_HEADING_LEVEL,
+        "--level",
+        "-l",
+        help="Bu seviyeye kadar başlıklar bölüm sayılır (1 = yalnızca '#').",
+        min=1,
+        max=6,
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Var olan bölümleri de yeniden üret."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Ses üretmeden bölüm listesini göster."
+    ),
+) -> None:
+    """Bir kitabı bölüm bölüm seslendirir.
+
+    Var olan bölümler atlanır; yarıda kalan iş aynı komutla kaldığı yerden
+    devam eder.
+    """
+    config = _resolved_config(voice=voice, rate=rate, engine=engine)
+    destination = output or config.output_dir / book.slugify(source.stem)
+
+    try:
+        if dry_run:
+            _print_chapters(source, level)
+            return
+        result = book.narrate(
+            source, destination, config, level=level, force=force, progress=_chapter_progress
+        )
+    except book.BookError as exc:
+        typer.secho(f"\nHata: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    except (EngineError, audio.AudioError) as exc:
+        typer.secho(f"\nHata: {exc}", fg=typer.colors.RED, err=True)
+        typer.secho(
+            "Üretilen bölümler korundu; aynı komutu tekrar çalıştırınca kaldığı "
+            "yerden devam eder.",
+            fg=typer.colors.YELLOW,
+        )
+        raise typer.Exit(code=1) from exc
+    except KeyboardInterrupt:
+        typer.secho(
+            "\nDurduruldu. Aynı komutla kaldığı yerden devam edebilirsin.",
+            fg=typer.colors.YELLOW,
+        )
+        raise typer.Exit(code=130) from None
+
+    typer.echo()
+    if result.skipped:
+        typer.secho(
+            f"{result.skipped} bölüm zaten üretilmişti, atlandı.",
+            fg=typer.colors.YELLOW,
+        )
+    typer.secho(
+        f"Hazır: {len(result.chapters)} bölüm → {result.directory}",
+        fg=typer.colors.GREEN,
+    )
+    typer.echo(f"Oynatma listesi: {result.playlist}")
 
 
 @app.command()
@@ -390,6 +466,27 @@ def _durdurulabilir(enabled: bool):
         runtime.clear(os.getpid())
         for sig, eski in onceki.items():
             signal.signal(sig, eski)
+
+
+def _chapter_progress(chapter: book.Chapter, total: int, skipped: bool) -> None:
+    etiket = chapter.title or f"Bölüm {chapter.number}"
+    durum = " (atlandı)" if skipped else ""
+    typer.echo(f"Bölüm {chapter.number}/{total}: {etiket[:60]}{durum}")
+
+
+def _print_chapters(source: Path, level: int) -> None:
+    chapters = book.split_chapters(book.load_text(source), level)
+    if not chapters:
+        typer.secho("Bölüm bulunamadı.", fg=typer.colors.YELLOW)
+        return
+
+    toplam = f"{sum(len(chapter.text) for chapter in chapters):,}".replace(",", ".")
+    typer.secho(
+        f"{len(chapters)} bölüm, toplam {toplam} karakter.", fg=typer.colors.CYAN
+    )
+    for chapter in chapters:
+        ad = chapter.filename(len(chapters))
+        typer.echo(f"  {ad:<48} {len(chapter.text):>8} karakter")
 
 
 def _recent_outputs(config: Config) -> list[Path]:

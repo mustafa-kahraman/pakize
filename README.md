@@ -72,6 +72,7 @@ alabilirsin. `/tmp` yeniden başlatmada temizlendiği için kalıcı arşiv isti
 ### Diğer komutlar
 
 ```bash
+pakize kitap kitap.epub    # bir kitabı bölüm bölüm seslendir
 pakize duraklat            # çalmayı duraklat; duraklatılmışsa sürdür (aynı komut)
 pakize dur                 # çalmakta olan seslendirmeyi durdur
 pakize son                 # en son üretilen sesi yeniden çal
@@ -82,6 +83,63 @@ pakize voices -l all       # tüm dilleri listele
 pakize config              # etkin ayarları göster
 pakize config --init       # açıklamalı config dosyası oluştur
 ```
+
+## Kitap seslendirme
+
+Uzun bir metni bölüm bölüm sese çevirir. Bir kitap 8-10 saatlik ses demek;
+tek dosya yerine her bölüm ayrı yazılır, yanına oynatma listesi bırakılır.
+
+```bash
+pakize kitap kitap.epub                  # bölümler /tmp/pakize/kitap/ altına
+pakize kitap kitap.pdf -o ~/Müzik/kitap  # başka bir dizine
+pakize kitap kitap.md --dry-run          # bölüm listesini gör, ses üretme
+pakize kitap kitap.epub -l 1             # yalnızca '#' başlıkları bölüm sayılsın
+```
+
+Çıktı:
+
+```
+kitap/
+  01-onsoz.mp3
+  02-birinci-bolum.mp3
+  03-ikinci-bolum.mp3
+  kitap.m3u
+```
+
+### Yarıda kalırsa
+
+Var olan bölüm dosyaları yeniden üretilmez. Üretim kesilirse (ağ koptu, Ctrl+C
+bastın, makine kapandı) **aynı komutu tekrar çalıştır** — kaldığı yerden devam
+eder:
+
+```
+Bölüm 1/24: Önsöz (atlandı)
+Bölüm 2/24: Birinci Bölüm (atlandı)
+Bölüm 3/24: İkinci Bölüm
+```
+
+Sıfır baytlık dosyalar yarım kalmış sayılır ve yeniden üretilir. Her şeyi
+baştan üretmek için `--force`.
+
+### Desteklenen biçimler
+
+`.txt` ve `.md` doğrudan okunur. `.epub`, `.pdf`, `.mobi` ve Calibre'nin
+tanıdığı diğer biçimler `ebook-convert` ile Markdown'a çevrilir:
+
+```bash
+sudo apt install calibre
+```
+
+Markdown istenmesinin sebebi başlıkların korunması — bölüm ayrımının tek
+güvenilir kaynağı onlar.
+
+> PDF'te metin katmanı yoksa (taranmış kitap) ya da sayfa düzeni çok sütunluysa
+> dönüştürme kalitesi düşer. `--dry-run` ile bölüm listesine bakıp karar ver.
+
+### Bölüm bulunamazsa
+
+Metinde hiç başlık yoksa kitap, paragraf sınırlarına saygı duyularak yaklaşık
+eşit parçalara bölünür — aksi hâlde tüm kitap tek devasa dosyaya düşerdi.
 
 ## Claude Code transkripti
 
