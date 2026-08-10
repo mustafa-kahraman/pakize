@@ -65,6 +65,7 @@ alabilirsin. `/tmp` yeniden başlatmada temizlendiği için kalıcı arşiv isti
 | `-v, --voice` | TTS sesi (örn. `tr-TR-AhmetNeural`) |
 | `-r, --rate` | Konuşma hızı çarpanı (örn. `1.15`) |
 | `-e, --engine` | Kullanılacak motor |
+| `-T, --translate` | Seslendirmeden önce bu dile çevir (örn. `tr`) |
 | `--no-play` | Ses hazır olunca otomatik çalma |
 | `--no-stream` | Parçaları beklet, hepsi bitince tek seferde çal |
 | `--dry-run` | Ses üretmeden okunacak metni göster |
@@ -83,6 +84,55 @@ pakize voices -l all       # tüm dilleri listele
 pakize config              # etkin ayarları göster
 pakize config --init       # açıklamalı config dosyası oluştur
 ```
+
+## Çeviri
+
+Metni seslendirmeden önce çevirir. İngilizce bir kitabı Türkçe dinlemek için:
+
+```bash
+pakize speak makale.md --translate tr    # veya -T tr
+pakize kitap kitap.epub --translate tr
+pakize speak -t -T en                    # son cevabı İngilizce dinle
+```
+
+Kaynak dil kendiliğinden tespit edilir; zaten hedef dildeyse metne dokunulmaz.
+Kalıcı hâle getirmek için config'e `translate_to = "tr"` yaz.
+
+### Nereye yerleşiyor
+
+Çeviri, **ayrıştırmadan sonra ve politikadan önce** çalışır. Sırası önemli:
+
+| Adım | Neden |
+|------|-------|
+| Ayrıştırmadan sonra | Kod blokları ve tablolar çeviriye hiç girmez |
+| Politikadan önce | "Burada 12 satırlık bir kod bloğu var" anonsu tekrar çevrilmez |
+
+Çevrilen segmentler: düz metin, başlık, liste maddesi, alıntı. Kod, tablo,
+bağlantı ve dosya yolları dokunulmadan geçer.
+
+Örnek — İngilizce kaynak, Türkçe çıktı:
+
+```
+Elliott Dalganın Temelleri.
+Elliott Wave teorisi, piyasa fiyatlarının belirli kalıplarda ortaya çıktığını
+öne sürüyor.
+Burada 2 satırlık bir Python kod bloğu var.     ← kod çevrilmedi, anons Türkçe
+İkinci dalga hiçbir zaman birinci dalganın yüzde 100'ünden fazlasını geri
+çekemez.
+```
+
+### Sınırlar
+
+Google'ın ücretsiz ucu **resmî bir API değildir**: kota belirsizdir ve çok
+sayıda istekte geçici olarak engellenebilir.
+
+Bunu hafifletmek için satırlar toplu gönderilir — uç satır sonlarını koruduğu
+için tek istekte onlarca segment çevrilir. Bir kitapta bu, binlerce istek
+yerine yüzlerce istek demektir. İstekler seri gider, aralarında kısa bir
+bekleme olur ve hız sınırında artan gecikmeyle tekrar denenir.
+
+Yine de engellenirsen: kitap seslendirmede üretilen bölümler korunur, biraz
+sonra aynı komutu çalıştırınca kaldığı yerden devam eder.
 
 ## Kitap seslendirme
 

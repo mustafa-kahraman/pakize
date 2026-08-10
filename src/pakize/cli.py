@@ -20,7 +20,7 @@ from . import audio, book, runtime
 from .config import Config, config_path, load_config, write_default_config
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
-from .pipeline import plan_speech, synthesize
+from .pipeline import TranslationError, plan_speech, synthesize
 from .sources import (
     ClipboardError,
     Roles,
@@ -92,6 +92,12 @@ def speak(
         None, "--rate", "-r", help="Konuşma hızı çarpanı (örn. 1.15)."
     ),
     engine: str = typer.Option(None, "--engine", "-e", help="Kullanılacak motor."),
+    translate: str = typer.Option(
+        None,
+        "--translate",
+        "-T",
+        help="Seslendirmeden önce bu dile çevir (örn. tr, en).",
+    ),
     play: bool = typer.Option(
         True, "--play/--no-play", help="Ses hazır olunca otomatik çal."
     ),
@@ -122,7 +128,9 @@ def speak(
         typer.secho(_bos_girdi_mesaji(clipboard, transcript), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
-    config = _resolved_config(voice=voice, rate=rate, engine=engine, stream=stream)
+    config = _resolved_config(
+        voice=voice, rate=rate, engine=engine, stream=stream, translate_to=translate
+    )
 
     if dry_run:
         _print_plan(text, config)
@@ -143,7 +151,7 @@ def speak(
     except KeyboardInterrupt:
         typer.secho("\nDurduruldu.", fg=typer.colors.YELLOW)
         raise typer.Exit(code=130) from None
-    except EngineError as exc:
+    except (EngineError, TranslationError) as exc:
         typer.secho(f"\nHata: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
     except audio.AudioError as exc:
@@ -183,6 +191,12 @@ def kitap(
     voice: str = typer.Option(None, "--voice", "-v", help="TTS sesi."),
     rate: float = typer.Option(None, "--rate", "-r", help="Konuşma hızı çarpanı."),
     engine: str = typer.Option(None, "--engine", "-e", help="Kullanılacak motor."),
+    translate: str = typer.Option(
+        None,
+        "--translate",
+        "-T",
+        help="Seslendirmeden önce bu dile çevir (örn. tr).",
+    ),
     level: int = typer.Option(
         book.DEFAULT_HEADING_LEVEL,
         "--level",
@@ -203,7 +217,9 @@ def kitap(
     Var olan bölümler atlanır; yarıda kalan iş aynı komutla kaldığı yerden
     devam eder.
     """
-    config = _resolved_config(voice=voice, rate=rate, engine=engine)
+    config = _resolved_config(
+        voice=voice, rate=rate, engine=engine, translate_to=translate
+    )
     destination = output or config.output_dir / book.slugify(source.stem)
 
     try:
@@ -216,7 +232,7 @@ def kitap(
     except book.BookError as exc:
         typer.secho(f"\nHata: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
-    except (EngineError, audio.AudioError) as exc:
+    except (EngineError, TranslationError, audio.AudioError) as exc:
         typer.secho(f"\nHata: {exc}", fg=typer.colors.RED, err=True)
         typer.secho(
             "Üretilen bölümler korundu; aynı komutu tekrar çalıştırınca kaldığı "
@@ -417,6 +433,7 @@ def _resolved_config(
     rate: float | None = None,
     engine: str | None = None,
     stream: bool | None = None,
+    translate_to: str | None = None,
 ) -> Config:
     """Dosyadan gelen ayarları CLI bayraklarıyla ezer."""
     config = load_config()
@@ -427,6 +444,7 @@ def _resolved_config(
             ("rate", rate),
             ("engine", engine),
             ("stream", stream),
+            ("translate_to", translate_to),
         )
         if value is not None
     }

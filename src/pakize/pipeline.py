@@ -18,8 +18,9 @@ from .audio import concat
 from .chunking import build_chunks
 from .config import Config
 from .engines import EngineError, EngineUnavailable, create_engine
-from .models import Chunk, SegmentType
+from .models import Chunk, Segment, SegmentType
 from .parsing import apply_policy, parse_segments
+from .translate import GoogleTranslator, TranslationError, translate_segments
 
 MAX_CONCURRENT_REQUESTS = 4
 """Aynı anda kaç parçanın seslendirileceği.
@@ -67,9 +68,25 @@ def plan_speech(text: str, config: Config) -> Plan:
     Web arayüzünün önizlemesi ve CLI'ın `--dry-run` modu bunu kullanır.
     """
     segments = parse_segments(text)
+    segments = _translate_if_needed(segments, config)
     utterances, skipped = apply_policy(segments, config)
     chunks = build_chunks(utterances, config.max_chunk_chars)
     return Plan(chunks=chunks, skipped=skipped)
+
+
+def _translate_if_needed(segments: list[Segment], config: Config) -> list[Segment]:
+    """Çeviri istenmişse segmentleri çevirir.
+
+    Ayrıştırmadan sonra çalışır ki kod blokları çeviriye girmesin; politikadan
+    önce çalışır ki bizim ürettiğimiz Türkçe anonslar tekrar çevrilmesin.
+    """
+    if not config.translate_to:
+        return segments
+
+    translator = GoogleTranslator(
+        target=config.translate_to, source=config.translate_from
+    )
+    return translate_segments(segments, translator)
 
 
 def synthesize(
@@ -191,4 +208,5 @@ __all__ = [
     "synthesize_async",
     "EngineError",
     "EngineUnavailable",
+    "TranslationError",
 ]

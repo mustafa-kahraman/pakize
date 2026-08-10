@@ -70,6 +70,12 @@ class Config:
     normalize_decimals: bool = True
     """Ondalık sayılardaki noktayı virgüle çevir (Türkçe okunuş için)."""
 
+    translate_to: str | None = None
+    """Seslendirmeden önce çevrilecek hedef dil kodu; None ise çeviri yok."""
+
+    translate_from: str = "auto"
+    """Kaynak dil kodu; "auto" ise servis kendisi tespit eder."""
+
     stream: bool = True
     """Parçalar hazır oldukça sırayla çal; hepsinin bitmesini bekleme."""
 
@@ -137,6 +143,8 @@ def _apply_overrides(base: Config, data: dict) -> Config:
         "max_chunk_chars": int,
         "normalize_decimals": bool,
         "stream": bool,
+        "translate_to": str,
+        "translate_from": str,
     }
 
     overrides: dict = {}
@@ -166,6 +174,8 @@ _FIELD_NOTES: dict[str, str] = {
     "output_dir": "çıktı yolu verilmediğinde seslerin biriktiği dizin",
     "stream": "ilk parça hazır olunca çalmaya başla, hepsini bekleme",
     "normalize_decimals": "1.15 → 1,15 (Türkçe'de ondalık ayracı virgüldür)",
+    "translate_to": "seslendirmeden önce çevrilecek dil (örn. tr); boşsa çeviri yok",
+    "translate_from": "kaynak dil; auto ise servis kendisi tespit eder",
     "piper_model": "Piper ses modelinin (.onnx) yolu",
     "piper_binary": "piper çalıştırılabiliri; boşsa PATH'te aranır",
 }
@@ -238,6 +248,7 @@ def _yorumla(satir: str, aciklama: str) -> str:
 
 
 _ORNEK_DEGERLER: dict[str, object] = {
+    "translate_to": "tr",
     "piper_model": "~/.local/share/piper/tr_TR-dfki-medium.onnx",
     "piper_binary": "~/.local/bin/piper",
 }
