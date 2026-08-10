@@ -17,7 +17,7 @@ from pathlib import Path
 import typer
 
 from . import audio, runtime
-from .config import Config, config_path, load_config
+from .config import Config, config_path, load_config, write_default_config
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
 from .pipeline import plan_speech, synthesize
@@ -191,9 +191,29 @@ def voices(
 
 
 @app.command("config")
-def show_config() -> None:
+def show_config(
+    init: bool = typer.Option(
+        False,
+        "--init",
+        help="Varsayılan ayarlarla açıklamalı bir config dosyası oluştur.",
+    ),
+) -> None:
     """Etkin ayarları ve config dosyasının yolunu gösterir."""
     path = config_path()
+
+    if init:
+        try:
+            yazilan = write_default_config(path)
+        except FileExistsError:
+            typer.secho(
+                f"Dosya zaten var: {path}\n"
+                "Üzerine yazmıyorum; değiştirmek istersen dosyayı elle düzenle.",
+                fg=typer.colors.YELLOW,
+            )
+            raise typer.Exit(code=1) from None
+        typer.secho(f"Yazıldı: {yazilan}", fg=typer.colors.GREEN)
+        return
+
     config = load_config(path)
 
     typer.echo(f"Config dosyası: {path}" + ("" if path.is_file() else " (yok)"))

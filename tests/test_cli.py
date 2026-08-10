@@ -264,6 +264,29 @@ def test_calma_kapaliyken_surec_kaydedilmez(cikti_dizini, monkeypatch):
     assert kayitli == [None]
 
 
+def test_config_init_dosya_olusturur(tmp_path, monkeypatch):
+    hedef = tmp_path / "pakize" / "config.toml"
+    monkeypatch.setattr(cli, "config_path", lambda: hedef)
+
+    sonuc = runner.invoke(cli.app, ["config", "--init"])
+
+    assert sonuc.exit_code == 0
+    assert hedef.is_file()
+    assert str(hedef) in sonuc.stdout
+
+
+def test_config_init_mevcut_dosyayi_ezmez(tmp_path, monkeypatch):
+    hedef = tmp_path / "config.toml"
+    hedef.write_text('voice = "tr-TR-AhmetNeural"\n', encoding="utf-8")
+    monkeypatch.setattr(cli, "config_path", lambda: hedef)
+
+    sonuc = runner.invoke(cli.app, ["config", "--init"])
+
+    assert sonuc.exit_code == 1
+    assert "zaten var" in sonuc.stdout
+    assert hedef.read_text(encoding="utf-8") == 'voice = "tr-TR-AhmetNeural"\n'
+
+
 def test_config_komutu_etkin_ayarlari_gosterir(cikti_dizini):
     sonuc = runner.invoke(cli.app, ["config"])
 

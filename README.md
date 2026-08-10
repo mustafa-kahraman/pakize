@@ -72,6 +72,7 @@ pakize son --list -n 30    # daha fazlasını göster
 pakize voices              # Türkçe sesleri listele
 pakize voices -l all       # tüm dilleri listele
 pakize config              # etkin ayarları göster
+pakize config --init       # açıklamalı config dosyası oluştur
 ```
 
 ## Klavye kısayolu (GNOME)
@@ -152,6 +153,15 @@ istersen `--no-stream` kullan veya config'te `stream = false` yaz.
 
 Ayarlar `~/.config/pakize/config.toml` dosyasından okunur; CLI bayrakları bu
 dosyayı ezer. Dosya olmadan da çalışır.
+
+Açıklamalı bir başlangıç dosyası oluşturmak için:
+
+```bash
+pakize config --init
+```
+
+Dosya, koddaki gerçek varsayılanlardan üretilir — ikinci bir doğruluk kaynağı
+oluşmaz. Var olan dosyanın üzerine yazmaz.
 
 ```toml
 voice = "tr-TR-EmelNeural"       # tr-TR-AhmetNeural de var

@@ -152,6 +152,118 @@ def _apply_overrides(base: Config, data: dict) -> Config:
     return replace(base, **overrides)
 
 
+_FIELD_NOTES: dict[str, str] = {
+    "voice": "kullanılacak ses — 'pakize voices' ile listele",
+    "engine": "birincil TTS motoru",
+    "fallback_engine": "birincil motor çalışmazsa denenecek motor",
+    "rate": "konuşma hızı çarpanı; 1.0 = normal, ara değerler serbest (1.12 olur)",
+    "volume": "ses yüksekliği çarpanı",
+    "pitch_hz": "ses perdesi kaydırması (Hz)",
+    "max_chunk_chars": "bir TTS isteğine sığdırılacak azami karakter",
+    "output_dir": "çıktı yolu verilmediğinde seslerin biriktiği dizin",
+    "stream": "ilk parça hazır olunca çalmaya başla, hepsini bekleme",
+    "normalize_decimals": "1.15 → 1,15 (Türkçe'de ondalık ayracı virgüldür)",
+    "piper_model": "Piper ses modelinin (.onnx) yolu",
+}
+"""Üretilen config dosyasındaki açıklama satırları.
+
+Varsayılan değerlerin kendisi `Config`'ten okunur; burada yalnızca ne işe
+yaradıkları yazar. Böylece varsayılan değişince dosya kendiliğinden güncel kalır.
+"""
+
+_POLICY_NOTES: dict[SegmentType, str] = {
+    SegmentType.CODE_BLOCK: "kod blokları — okunmaz, kısaca anons edilir",
+    SegmentType.TABLE: "Markdown tabloları",
+    SegmentType.URL: "çıplak bağlantı adresleri",
+    SegmentType.FILE_PATH: "dosya yolları — 'read' yalnızca dosya adını okur",
+    SegmentType.HORIZONTAL_RULE: "yatay çizgiler",
+    SegmentType.INLINE_CODE: "satır içi `kod` parçaları",
+    SegmentType.PROSE: "düz metin",
+    SegmentType.HEADING: "başlıklar",
+    SegmentType.LIST_ITEM: "liste maddeleri",
+    SegmentType.QUOTE: "alıntı blokları",
+}
+
+
+def render_default_config() -> str:
+    """Varsayılan ayarları, açıklamalı bir TOML metni olarak üretir.
+
+    Değerler `Config` ve `DEFAULT_POLICY`'den okunduğu için ikinci bir doğruluk
+    kaynağı oluşmaz; varsayılan değişirse üretilen dosya da değişir.
+    """
+    defaults = Config()
+    satirlar = [
+        "# Pakize yapılandırması",
+        "# 'pakize config --init' ile üretildi.",
+        "# Bu dosyayı silersen Pakize varsayılanlarla çalışmaya devam eder.",
+        "",
+    ]
+
+    for alan, aciklama in _FIELD_NOTES.items():
+        deger = getattr(defaults, alan)
+        satir = f"{alan} = {_toml_value(deger)}"
+        # TOML'da boş değer yok; tanımsız ayarları örnek olarak yorumda bırakırız.
+        if deger is None:
+            satir = f"# {alan} = {_toml_value(_ORNEK_DEGERLER[alan])}"
+        satirlar.append(_yorumla(satir, aciklama))
+
+    satirlar += [
+        "",
+        "[policy]",
+        '# Her segment tipi için: "read" (oku), "announce" (anons et), "skip" (atla)',
+    ]
+    for segment_type, aciklama in _POLICY_NOTES.items():
+        action = DEFAULT_POLICY[segment_type]
+        satir = f'{segment_type.value} = "{action.value}"'
+        satirlar.append(_yorumla(satir, aciklama))
+
+    return "\n".join(satirlar) + "\n"
+
+
+_YORUM_SUTUNU = 44
+
+
+def _yorumla(satir: str, aciklama: str) -> str:
+    """Ayar satırının sağına, hizalı bir açıklama yorumu ekler.
+
+    Satır hizalama sütununu aşarsa yorum yine de tek boşlukla ayrılır; aksi
+    hâlde uzun değerlerde açıklama satıra yapışırdı.
+    """
+    bosluk = max(_YORUM_SUTUNU - len(satir), 1)
+    return f"{satir}{' ' * bosluk}# {aciklama}"
+
+
+_ORNEK_DEGERLER: dict[str, object] = {
+    "fallback_engine": "piper",
+    "piper_model": "~/.local/share/piper/tr_TR-fettah-medium.onnx",
+}
+"""Varsayılanı tanımsız olan ayarlar için yorumda gösterilecek örnek değerler."""
+
+
+def write_default_config(path: Path | None = None) -> Path:
+    """Varsayılan config dosyasını yazar.
+
+    Var olan dosyanın üzerine yazmaz; ayarlarını kaybetmemen için
+    `FileExistsError` fırlatır.
+    """
+    target = path or config_path()
+    if target.exists():
+        raise FileExistsError(target)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(render_default_config(), encoding="utf-8")
+    return target
+
+
+def _toml_value(value: object) -> str:
+    """Python değerini TOML gösterimine çevirir."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return f'"{value}"'
+
+
 def _merge_policy(
     base: dict[SegmentType, Action], table: dict
 ) -> dict[SegmentType, Action]:
