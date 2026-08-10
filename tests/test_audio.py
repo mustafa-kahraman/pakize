@@ -1,0 +1,102 @@
+"""Ses çalma ve durdurma testleri.
+
+Hermetiktir: ffplay çalıştırılmaz, süreç nesnesi sahtelenir.
+"""
+
+import signal
+from types import SimpleNamespace
+
+import pytest
+
+from pakize import audio
+from pakize.audio import AudioError
+
+
+class SahteSurec:
+    """communicate/terminate arayüzünü taklit eden sahte ffplay süreci."""
+
+    def __init__(self, returncode: int = 0, stderr: bytes = b""):
+        self.returncode = returncode
+        self._stderr = stderr
+        self.terminate_edildi = False
+
+    def communicate(self):
+        return (b"", self._stderr)
+
+    def terminate(self):
+        self.terminate_edildi = True
+
+
+@pytest.fixture(autouse=True)
+def temiz_kayit():
+    """Her testten sonra modül düzeyindeki çalan süreç kaydını temizler."""
+    yield
+    audio._player = None
+
+
+@pytest.fixture
+def surec(monkeypatch):
+    """`subprocess.Popen`'ı sahte süreçle değiştirir."""
+    tutucu = SimpleNamespace(son=None)
+
+    def ayarla(returncode: int = 0, stderr: bytes = b""):
+        def sahte_popen(command, **kwargs):
+            tutucu.son = SahteSurec(returncode, stderr)
+            return tutucu.son
+
+        monkeypatch.setattr(audio.subprocess, "Popen", sahte_popen)
+        monkeypatch.setattr(audio, "_require_binary", lambda name: f"/usr/bin/{name}")
+        return tutucu
+
+    return ayarla
+
+
+def test_calma_basariliysa_hata_yok(surec, tmp_path):
+    tutucu = surec()
+
+    audio.play(tmp_path / "ses.mp3")
+
+    assert tutucu.son is not None
+
+
+def test_calma_bitince_kayit_temizlenir(surec, tmp_path):
+    surec()
+
+    audio.play(tmp_path / "ses.mp3")
+
+    assert audio.stop_playback() is False
+
+
+def test_sonlandirma_sinyali_hata_sayilmaz(surec, tmp_path):
+    surec(returncode=-signal.SIGTERM)
+
+    audio.play(tmp_path / "ses.mp3")
+
+
+def test_gercek_hata_yukselir(surec, tmp_path):
+    surec(returncode=1, stderr=b"kodek yok")
+
+    with pytest.raises(AudioError, match="kodek yok"):
+        audio.play(tmp_path / "ses.mp3")
+
+
+def test_stop_playback_calan_sureci_sonlandirir():
+    sahte = SahteSurec()
+    audio._set_player(sahte)
+
+    assert audio.stop_playback() is True
+    assert sahte.terminate_edildi is True
+
+
+def test_stop_playback_calan_yoksa_false():
+    assert audio.stop_playback() is False
+
+
+def test_olmus_surec_stop_playbackte_hata_vermez():
+    class OlmusSurec(SahteSurec):
+        def terminate(self):
+            raise ProcessLookupError
+
+    audio._set_player(OlmusSurec())
+
+    assert audio.stop_playback() is False

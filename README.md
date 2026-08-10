@@ -65,6 +65,7 @@ alabilirsin. `/tmp` yeniden başlatmada temizlendiği için kalıcı arşiv isti
 ### Diğer komutlar
 
 ```bash
+pakize dur                 # çalmakta olan seslendirmeyi durdur
 pakize son                 # en son üretilen sesi yeniden çal
 pakize son --list          # son üretilen sesleri tarihiyle listele
 pakize son --list -n 30    # daha fazlasını göster
@@ -122,6 +123,21 @@ gsettings set "$YOL" binding '<Super><Alt>p'
 
 Kaldırmak için `gsettings reset-recursively "$YOL"` çalıştır ve kısayolu
 listeden çıkar.
+
+### Durdurma kısayolu
+
+Kısayoldan tetiklediğinde ortada terminal olmaz; Ctrl+C ile durduramazsın. Bu
+yüzden ikinci bir kısayol daha bağla:
+
+| Alan | Değer |
+|------|-------|
+| Ad | `Pakize: durdur` |
+| Komut | `/home/mustafa/.local/bin/pakize dur` |
+| Kısayol | tercihin (örn. `Super+Alt+D`) |
+
+`pakize dur` yalnızca Pakize'nin başlattığı çalmayı sonlandırır; sistemdeki
+başka `ffplay` süreçlerine dokunmaz. Çalan bir şey yoksa "Çalan bir seslendirme
+yok." der. Terminalden çalıştırdığında Ctrl+C de aynı işi görür.
 
 ### Akıcı çalma
 

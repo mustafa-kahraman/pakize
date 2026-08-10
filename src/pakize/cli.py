@@ -6,6 +6,9 @@ Bu modül ince bir kabuktur: girdiyi toplar, config'i bayraklarla ezer ve
 
 from __future__ import annotations
 
+import contextlib
+import os
+import signal
 import sys
 from dataclasses import replace
 from datetime import datetime
@@ -13,7 +16,7 @@ from pathlib import Path
 
 import typer
 
-from . import audio
+from . import audio, runtime
 from .config import Config, config_path, load_config
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
@@ -90,13 +93,17 @@ def speak(
     # Akıcı modda parçalar üretildikçe çalınır; sonda ikinci kez çalmayız.
     streaming = play and config.stream
     try:
-        result = synthesize(
-            text,
-            destination,
-            config,
-            progress=_progress,
-            on_part_ready=audio.play_async if streaming else None,
-        )
+        with _durdurulabilir(play):
+            result = synthesize(
+                text,
+                destination,
+                config,
+                progress=_progress,
+                on_part_ready=audio.play_async if streaming else None,
+            )
+    except KeyboardInterrupt:
+        typer.secho("\nDurduruldu.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=130) from None
     except EngineError as exc:
         typer.secho(f"\nHata: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
@@ -114,7 +121,27 @@ def speak(
         )
 
     if play and not streaming:
-        audio.play(result.output)
+        try:
+            with _durdurulabilir(True):
+                audio.play(result.output)
+        except KeyboardInterrupt:
+            typer.secho("\nDurduruldu.", fg=typer.colors.YELLOW)
+            raise typer.Exit(code=130) from None
+
+
+@app.command()
+def dur() -> None:
+    """Çalmakta olan seslendirmeyi durdurur."""
+    pid = runtime.running_pid()
+    if pid is None:
+        typer.secho("Çalan bir seslendirme yok.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=1)
+
+    if not runtime.stop(pid):
+        typer.secho("Seslendirme zaten sonlanmış.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=1)
+
+    typer.secho("Durduruldu.", fg=typer.colors.GREEN)
 
 
 @app.command()
@@ -229,6 +256,32 @@ def _default_output_path(config: Config) -> Path:
     """
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return config.output_dir / f"{stamp}.mp3"
+
+
+@contextlib.contextmanager
+def _durdurulabilir(enabled: bool):
+    """Çalma süresince süreci `pakize dur` ile durdurulabilir kılar.
+
+    Sinyal geldiğinde önce çalan ses kesilir, sonra `KeyboardInterrupt`
+    yükseltilir; böylece Ctrl+C ile `pakize dur` aynı yoldan ilerler ve
+    arkada üretilmeye devam eden parçalar da iptal olur.
+    """
+    if not enabled:
+        yield
+        return
+
+    def handler(signum, frame):
+        audio.stop_playback()
+        raise KeyboardInterrupt
+
+    onceki = {sig: signal.signal(sig, handler) for sig in (signal.SIGTERM, signal.SIGINT)}
+    runtime.register(os.getpid())
+    try:
+        yield
+    finally:
+        runtime.clear(os.getpid())
+        for sig, eski in onceki.items():
+            signal.signal(sig, eski)
 
 
 def _recent_outputs(config: Config) -> list[Path]:

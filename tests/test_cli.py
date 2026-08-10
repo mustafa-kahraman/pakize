@@ -4,6 +4,7 @@ Hermetiktir: gerçek TTS çağrısı ve ses çalma yamalanır, çıktı dizini g
 klasöre yönlendirilir.
 """
 
+import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -185,6 +186,82 @@ def test_pano_araci_yoksa_hata_gosterilir(cikti_dizini, monkeypatch):
 
     assert sonuc.exit_code == 1
     assert "xclip kurulu değil" in sonuc.stderr
+
+
+def test_dur_calan_sureci_sonlandirir(monkeypatch):
+    durdurulan: list[int] = []
+    monkeypatch.setattr(cli.runtime, "running_pid", lambda: 4242)
+    monkeypatch.setattr(
+        cli.runtime, "stop", lambda pid: bool(durdurulan.append(pid) or True)
+    )
+
+    sonuc = runner.invoke(cli.app, ["dur"])
+
+    assert sonuc.exit_code == 0
+    assert durdurulan == [4242]
+    assert "Durduruldu." in sonuc.stdout
+
+
+def test_dur_calan_yoksa_bilgi_verir(monkeypatch):
+    monkeypatch.setattr(cli.runtime, "running_pid", lambda: None)
+
+    sonuc = runner.invoke(cli.app, ["dur"])
+
+    assert sonuc.exit_code == 1
+    assert "Çalan bir seslendirme yok." in sonuc.stdout
+
+
+def test_dur_surec_arada_olmusse_bilgi_verir(monkeypatch):
+    monkeypatch.setattr(cli.runtime, "running_pid", lambda: 4242)
+    monkeypatch.setattr(cli.runtime, "stop", lambda pid: False)
+
+    sonuc = runner.invoke(cli.app, ["dur"])
+
+    assert sonuc.exit_code == 1
+    assert "zaten sonlanmış" in sonuc.stdout
+
+
+def test_calma_sirasinda_surec_kaydedilir(cikti_dizini, monkeypatch):
+    from pakize.pipeline import Plan, SpeechResult
+
+    kayitli: list[int | None] = []
+
+    def sahte_synthesize(text, destination, config, progress=None, on_part_ready=None):
+        kayitli.append(cli.runtime.running_pid())
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"sahte-ses")
+        return SpeechResult(output=destination, plan=Plan(), engine=config.engine)
+
+    monkeypatch.setattr(cli, "synthesize", sahte_synthesize)
+    monkeypatch.setattr(cli.runtime, "_is_pakize", lambda pid: True)
+    monkeypatch.setattr(cli.audio, "play", lambda path: None)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    assert kayitli == [os.getpid()]
+    # Çalma bitince kayıt düşer.
+    assert cli.runtime.running_pid() is None
+
+
+def test_calma_kapaliyken_surec_kaydedilmez(cikti_dizini, monkeypatch):
+    from pakize.pipeline import Plan, SpeechResult
+
+    kayitli: list[int | None] = []
+
+    def sahte_synthesize(text, destination, config, progress=None, on_part_ready=None):
+        kayitli.append(cli.runtime.running_pid())
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"sahte-ses")
+        return SpeechResult(output=destination, plan=Plan(), engine=config.engine)
+
+    monkeypatch.setattr(cli, "synthesize", sahte_synthesize)
+    monkeypatch.setattr(cli.runtime, "_is_pakize", lambda pid: True)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-play"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    assert kayitli == [None]
 
 
 def test_config_komutu_etkin_ayarlari_gosterir(cikti_dizini):

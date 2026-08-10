@@ -4,8 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import signal
 import subprocess
+import threading
 from pathlib import Path
+
+_player_lock = threading.Lock()
+_player = None
+"""Çalmakta olan ffplay süreci; `stop_playback` bunun üzerinden keser."""
+
+_TERMINATION_CODES = frozenset(
+    {-signal.SIGTERM, -signal.SIGINT, 128 + signal.SIGTERM, 128 + signal.SIGINT}
+)
+"""Sonlandırma sinyaliyle biten çalmanın dönebileceği çıkış kodları."""
 
 
 class AudioError(RuntimeError):
@@ -60,7 +71,17 @@ def concat(parts: list[Path], destination: Path) -> Path:
 
 def play(path: Path) -> None:
     """Ses dosyasını ffplay ile, pencere açmadan ve sonunda kapanacak şekilde çalar."""
-    _run(_play_command(path))
+    process = subprocess.Popen(
+        _play_command(path),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    _set_player(process)
+    try:
+        _, stderr = process.communicate()
+    finally:
+        _clear_player(process)
+    _check_player_exit(process.returncode, stderr)
 
 
 async def play_async(path: Path) -> None:
@@ -68,16 +89,60 @@ async def play_async(path: Path) -> None:
 
     Akıcı çalmada üretim ve çalma aynı anda sürdüğü için gereklidir.
     """
-    command = _play_command(path)
     process = await asyncio.create_subprocess_exec(
-        *command, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE
+        *_play_command(path),
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
     )
-    _, stderr = await process.communicate()
-    if process.returncode != 0:
-        raise AudioError(
-            f"ffplay hata verdi (kod {process.returncode}): "
-            f"{stderr.decode(errors='replace').strip()}"
-        )
+    _set_player(process)
+    try:
+        _, stderr = await process.communicate()
+    finally:
+        _clear_player(process)
+    _check_player_exit(process.returncode, stderr)
+
+
+def stop_playback() -> bool:
+    """Çalmakta olan sesi sonlandırır; çalan bir şey yoksa False döner."""
+    with _player_lock:
+        process = _player
+    if process is None:
+        return False
+    try:
+        process.terminate()
+    except (ProcessLookupError, OSError):
+        return False
+    return True
+
+
+def _set_player(process) -> None:
+    """Çalan süreci kaydeder.
+
+    Aynı anda tek bir ses çaldığı için modül düzeyinde tek bir kayıt yeter;
+    `stop_playback` dışarıdan bu kayda bakarak sesi kesebilir.
+    """
+    global _player
+    with _player_lock:
+        _player = process
+
+
+def _clear_player(process) -> None:
+    global _player
+    with _player_lock:
+        if _player is process:
+            _player = None
+
+
+def _check_player_exit(returncode: int | None, stderr: bytes | None) -> None:
+    """ffplay çıkışını değerlendirir.
+
+    Sonlandırma sinyaliyle biten çalma hata değildir; `pakize dur` ve Ctrl+C
+    beklenen bir sonlanma yoludur.
+    """
+    if returncode in (0, None) or returncode in _TERMINATION_CODES:
+        return
+    detay = (stderr or b"").decode(errors="replace").strip()
+    raise AudioError(f"ffplay hata verdi (kod {returncode}): {detay}")
 
 
 def _play_command(path: Path) -> list[str]:
