@@ -157,6 +157,36 @@ def test_akici_modda_ses_parcalar_uzerinden_calinir(
     assert calinanlar == []
 
 
+def test_clipboard_bayragi_panodan_okur(cikti_dizini, monkeypatch):
+    monkeypatch.setattr(cli, "read_clipboard", lambda: "Panodaki metin.")
+
+    sonuc = runner.invoke(cli.app, ["speak", "--clipboard", "--dry-run"])
+
+    assert sonuc.exit_code == 0
+    assert "Panodaki metin." in sonuc.stdout
+
+
+def test_bos_pano_anlamli_hata_verir(cikti_dizini, monkeypatch):
+    monkeypatch.setattr(cli, "read_clipboard", lambda: "   \n")
+
+    sonuc = runner.invoke(cli.app, ["speak", "--clipboard"])
+
+    assert sonuc.exit_code == 1
+    assert "Pano boş." in sonuc.stderr
+
+
+def test_pano_araci_yoksa_hata_gosterilir(cikti_dizini, monkeypatch):
+    def patla():
+        raise cli.ClipboardError("Pano okunamıyor: xclip kurulu değil.")
+
+    monkeypatch.setattr(cli, "read_clipboard", patla)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--clipboard"])
+
+    assert sonuc.exit_code == 1
+    assert "xclip kurulu değil" in sonuc.stderr
+
+
 def test_config_komutu_etkin_ayarlari_gosterir(cikti_dizini):
     sonuc = runner.invoke(cli.app, ["config"])
 

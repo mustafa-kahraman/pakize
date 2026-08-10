@@ -29,8 +29,8 @@ Bu, `~/.local/bin/pakize` çalıştırılabilirini oluşturur. Kaldırmak için:
 # Dosyadan
 pakize speak notlar.md
 
-# Panodan (X11)
-xclip -o -selection clipboard | pakize speak
+# Panodan
+pakize speak --clipboard
 
 # Borudan
 echo "Okunacak metin" | pakize speak
@@ -53,6 +53,7 @@ alabilirsin. `/tmp` yeniden başlatmada temizlendiği için kalıcı arşiv isti
 
 | Bayrak | Açıklama |
 |--------|----------|
+| `-c, --clipboard` | Metni panodan al |
 | `-o, --output` | Üretilecek ses dosyasının yolu |
 | `-v, --voice` | TTS sesi (örn. `tr-TR-AhmetNeural`) |
 | `-r, --rate` | Konuşma hızı çarpanı (örn. `1.15`) |
@@ -71,6 +72,56 @@ pakize voices              # Türkçe sesleri listele
 pakize voices -l all       # tüm dilleri listele
 pakize config              # etkin ayarları göster
 ```
+
+## Klavye kısayolu (GNOME)
+
+Asıl kullanım şekli bu: metni kopyala, tuşa bas, dinle.
+
+Pano okuma X11'de `xclip`/`xsel`, Wayland'de `wl-paste` ile yapılır; oturum
+tipine uygun olan kendiliğinden seçilir.
+
+```bash
+sudo apt install xclip      # X11 için
+```
+
+### Arayüzden
+
+**Ayarlar → Klavye → Klavye Kısayollarını Görüntüle ve Özelleştir → Özel
+Kısayollar → +**
+
+| Alan | Değer |
+|------|-------|
+| Ad | `Pakize: panodakini oku` |
+| Komut | `/home/mustafa/.local/bin/pakize speak --clipboard` |
+| Kısayol | tercihin (örn. `Super+Alt+P`) |
+
+> Komutta **tam yol** kullan. Kısayollar `~/.local/bin` dizinini `PATH`'te
+> göremeyebilir.
+
+### Terminalden
+
+Aşağıdaki blok mevcut özel kısayolları silmeden yenisini ekler:
+
+```bash
+ANAHTAR=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pakize/
+YOL=org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$ANAHTAR
+
+MEVCUT=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)
+case "$MEVCUT" in
+  *"$ANAHTAR"*) ;;                                    # zaten ekli
+  "@as []"|"[]") YENI="['$ANAHTAR']" ;;
+  *) YENI="${MEVCUT%]}, '$ANAHTAR']" ;;
+esac
+[ -n "$YENI" ] && gsettings set org.gnome.settings-daemon.plugins.media-keys \
+  custom-keybindings "$YENI"
+
+gsettings set "$YOL" name 'Pakize: panodakini oku'
+gsettings set "$YOL" command "$HOME/.local/bin/pakize speak --clipboard"
+gsettings set "$YOL" binding '<Super><Alt>p'
+```
+
+Kaldırmak için `gsettings reset-recursively "$YOL"` çalıştır ve kısayolu
+listeden çıkar.
 
 ### Akıcı çalma
 

@@ -18,6 +18,7 @@ from .config import Config, config_path, load_config
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
 from .pipeline import plan_speech, synthesize
+from .sources import ClipboardError, read_clipboard
 
 app = typer.Typer(
     help="Metni ses dosyasına çevirir; kod bloklarını okumaz.",
@@ -44,6 +45,9 @@ def speak(
         dir_okay=False,
         readable=True,
     ),
+    clipboard: bool = typer.Option(
+        False, "--clipboard", "-c", help="Metni panodan al."
+    ),
     output: Path = typer.Option(
         None, "--output", "-o", help="Üretilecek ses dosyasının yolu."
     ),
@@ -65,9 +69,15 @@ def speak(
     ),
 ) -> None:
     """Bir metni seslendirir."""
-    text = _read_source(source)
+    try:
+        text = _read_source(source, clipboard)
+    except ClipboardError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
     if not text.strip():
-        typer.secho("Girdi boş.", fg=typer.colors.RED, err=True)
+        nereden = "Pano boş." if clipboard else "Girdi boş."
+        typer.secho(nereden, fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
     config = _resolved_config(voice=voice, rate=rate, engine=engine, stream=stream)
@@ -175,12 +185,15 @@ def show_config() -> None:
         typer.echo(f"  {segment_type.value:<18} {action.value}")
 
 
-def _read_source(source: Path | None) -> str:
+def _read_source(source: Path | None, clipboard: bool = False) -> str:
+    """Metni; panodan, dosyadan ya da stdin'den okur (bu öncelikle)."""
+    if clipboard:
+        return read_clipboard()
     if source is not None:
         return source.read_text(encoding="utf-8")
     if sys.stdin.isatty():
         typer.secho(
-            "Bir dosya yolu ver ya da metni stdin'den boruyla aktar.",
+            "Bir dosya yolu ver, --clipboard kullan ya da metni stdin'den aktar.",
             fg=typer.colors.RED,
             err=True,
         )
