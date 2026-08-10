@@ -267,37 +267,34 @@ def duraklat() -> None:
     Tek komutun iki işi görmesi kasıtlı: klavye kısayolunda aynı tuşla hem
     durdurup hem devam edebilirsin.
     """
-    pid = runtime.running_pid()
-    if pid is None:
+    pids = runtime.running_pids()
+    if not pids:
         typer.secho("Çalan bir seslendirme yok.", fg=typer.colors.YELLOW)
         raise typer.Exit(code=1)
 
-    if runtime.is_paused(pid):
-        if not runtime.resume(pid):
-            typer.secho("Sürdürülecek bir çalma yok.", fg=typer.colors.YELLOW)
-            raise typer.Exit(code=1)
-        typer.secho("Devam ediyor.", fg=typer.colors.GREEN)
+    # Herhangi biri duraklatılmışsa hepsini sürdürürüz; aksi hâlde aynı tuşa
+    # basmak bazılarını duraklatıp bazılarını sürdürerek karmaşa yaratırdı.
+    if any(runtime.is_paused(pid) for pid in pids):
+        etkilenen = sum(runtime.resume(pid) for pid in pids)
+        _bildir(etkilenen, len(pids), "Devam ediyor", "Sürdürülecek bir çalma yok.")
         return
 
-    if not runtime.pause(pid):
-        typer.secho("Duraklatılacak bir çalma yok.", fg=typer.colors.YELLOW)
-        raise typer.Exit(code=1)
-    typer.secho("Duraklatıldı.", fg=typer.colors.GREEN)
+    etkilenen = sum(runtime.pause(pid) for pid in pids)
+    _bildir(etkilenen, len(pids), "Duraklatıldı", "Duraklatılacak bir çalma yok.")
 
 
 @app.command()
 def dur() -> None:
     """Çalmakta olan seslendirmeyi durdurur."""
-    pid = runtime.running_pid()
-    if pid is None:
+    pids = runtime.running_pids()
+    if not pids:
         typer.secho("Çalan bir seslendirme yok.", fg=typer.colors.YELLOW)
         raise typer.Exit(code=1)
 
-    if not runtime.stop(pid):
-        typer.secho("Seslendirme zaten sonlanmış.", fg=typer.colors.YELLOW)
-        raise typer.Exit(code=1)
-
-    typer.secho("Durduruldu.", fg=typer.colors.GREEN)
+    # Hepsi durdurulur: aynı anda birden çok ses çalıyorsa "durdur" demek
+    # sesin kesilmesi demektir, birinin kesilmesi değil.
+    etkilenen = sum(runtime.stop(pid) for pid in pids)
+    _bildir(etkilenen, len(pids), "Durduruldu", "Seslendirme zaten sonlanmış.")
 
 
 @app.command()
@@ -458,6 +455,20 @@ def _default_output_path(config: Config) -> Path:
     """
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return config.output_dir / f"{stamp}.mp3"
+
+
+def _bildir(etkilenen: int, toplam: int, basari: str, bos_mesaj: str) -> None:
+    """Kaç seslendirmenin etkilendiğini bildirir.
+
+    Birden çok ses çalıyorsa sayıyı söylemek gerekir; tek sesse sayı gürültü
+    olurdu.
+    """
+    if not etkilenen:
+        typer.secho(bos_mesaj, fg=typer.colors.YELLOW)
+        raise typer.Exit(code=1)
+
+    ek = f" ({etkilenen} seslendirme)" if toplam > 1 else ""
+    typer.secho(f"{basari}.{ek}", fg=typer.colors.GREEN)
 
 
 @contextlib.contextmanager

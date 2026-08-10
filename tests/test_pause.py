@@ -85,7 +85,7 @@ def test_bozuk_stat_satiri_none_doner():
 
 
 def test_duraklat_komutu_calani_duraklatir(monkeypatch):
-    monkeypatch.setattr(cli.runtime, "running_pid", lambda: SPEAK_PID)
+    monkeypatch.setattr(cli.runtime, "running_pids", lambda: [SPEAK_PID])
     monkeypatch.setattr(cli.runtime, "is_paused", lambda pid: False)
     monkeypatch.setattr(cli.runtime, "pause", lambda pid: True)
 
@@ -96,7 +96,7 @@ def test_duraklat_komutu_calani_duraklatir(monkeypatch):
 
 
 def test_duraklat_komutu_duraklatilmisi_surdurur(monkeypatch):
-    monkeypatch.setattr(cli.runtime, "running_pid", lambda: SPEAK_PID)
+    monkeypatch.setattr(cli.runtime, "running_pids", lambda: [SPEAK_PID])
     monkeypatch.setattr(cli.runtime, "is_paused", lambda pid: True)
     monkeypatch.setattr(cli.runtime, "resume", lambda pid: True)
 
@@ -107,7 +107,7 @@ def test_duraklat_komutu_duraklatilmisi_surdurur(monkeypatch):
 
 
 def test_duraklat_calan_yoksa_bilgi_verir(monkeypatch):
-    monkeypatch.setattr(cli.runtime, "running_pid", lambda: None)
+    monkeypatch.setattr(cli.runtime, "running_pids", lambda: [])
 
     sonuc = runner.invoke(cli.app, ["duraklat"])
 

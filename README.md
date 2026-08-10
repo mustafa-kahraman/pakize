@@ -303,6 +303,18 @@ durdurur.
 
 Bu komutlar `pakize son` ile başlattığın çalmayı da yönetir.
 
+Aynı anda birden çok seslendirme çalıyorsa (iki ayrı terminalden başlattıysan)
+ikisi de yönetilir — `dur` hepsini durdurur, `duraklat` hepsini duraklatır:
+
+```
+$ pakize dur
+Durduruldu. (2 seslendirme)
+```
+
+`pakize kitap` ses çalmaz, yalnızca dosya üretir; bu yüzden arka planda bir
+kitap üretilirken başka bir terminalden `pakize speak -c` çalıştırmak
+çakışmaz.
+
 ### Akıcı çalma
 
 Varsayılan olarak ses, **ilk parça hazır olur olmaz** çalmaya başlar; kalan

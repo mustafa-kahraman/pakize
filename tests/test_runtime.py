@@ -36,31 +36,50 @@ def test_kayit_yazilir_ve_okunur(pakize_surecleri):
 
 def test_kayit_yoksa_none_doner():
     assert runtime.running_pid() is None
+    assert runtime.running_pids() == []
+
+
+def test_es_zamanli_calmalar_birbirini_ezmez(pakize_surecleri):
+    """İkinci çalma birincinin kaydını ezerse birincisi durdurulamaz kalır."""
+    pakize_surecleri(1111, 2222)
+    runtime.register(1111)
+    runtime.register(2222)
+
+    assert sorted(runtime.running_pids()) == [1111, 2222]
 
 
 def test_bayat_kayit_temizlenir(pakize_surecleri):
     pakize_surecleri()  # hiçbir süreç yaşamıyor
     runtime.register(4242)
 
-    assert runtime.running_pid() is None
-    assert not runtime.state_path().exists()
+    assert runtime.running_pids() == []
+    assert not (runtime.state_dir() / "4242").exists()
 
 
-def test_bozuk_kayit_none_doner(pakize_surecleri):
-    pakize_surecleri(4242)
-    runtime.state_path().write_text("bu bir sayı değil", encoding="utf-8")
-
-    assert runtime.running_pid() is None
-
-
-def test_clear_yalnizca_kendi_kaydini_siler():
+def test_yasayan_kayitlar_bayatlardan_etkilenmez(pakize_surecleri):
+    pakize_surecleri(1111)
     runtime.register(1111)
+    runtime.register(2222)
+
+    assert runtime.running_pids() == [1111]
+
+
+def test_sayi_olmayan_dosyalar_yoksayilir(pakize_surecleri):
+    pakize_surecleri(1111)
+    runtime.register(1111)
+    (runtime.state_dir() / "notlar.txt").write_text("x", encoding="utf-8")
+
+    assert runtime.running_pids() == [1111]
+
+
+def test_clear_yalnizca_kendi_kaydini_siler(pakize_surecleri):
+    pakize_surecleri(1111, 2222)
+    runtime.register(1111)
+    runtime.register(2222)
 
     runtime.clear(2222)
-    assert runtime.state_path().exists()
 
-    runtime.clear(1111)
-    assert not runtime.state_path().exists()
+    assert runtime.running_pids() == [1111]
 
 
 def test_stop_sonlandirma_sinyali_gonderir(monkeypatch):
@@ -81,7 +100,7 @@ def test_olmus_surec_hata_degil(monkeypatch):
     runtime.register(4242)
 
     assert runtime.stop(4242) is False
-    assert not runtime.state_path().exists()
+    assert not (runtime.state_dir() / "4242").exists()
 
 
 def test_izin_yoksa_false_doner(monkeypatch):

@@ -14,11 +14,16 @@ import signal
 import tempfile
 from pathlib import Path
 
-STATE_NAME = "pakize-playing.pid"
+STATE_NAME = "pakize-playing"
 
 
-def state_path() -> Path:
-    """Süreç kaydının tutulduğu dosya."""
+def state_dir() -> Path:
+    """Süreç kayıtlarının tutulduğu dizin.
+
+    Her çalan süreç için ayrı bir dosya tutulur. Tek dosya kullanmak, aynı
+    anda iki Pakize çaldığında birinin kaydını ezip o sürecin durdurulamaz
+    hâle gelmesine yol açıyordu.
+    """
     base = os.environ.get("XDG_RUNTIME_DIR")
     root = Path(base) if base else Path(tempfile.gettempdir())
     return root / STATE_NAME
@@ -26,36 +31,42 @@ def state_path() -> Path:
 
 def register(pid: int) -> None:
     """Çalmayı yürüten süreci kaydeder."""
-    path = state_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(pid), encoding="utf-8")
+    directory = state_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / str(pid)).write_text(str(pid), encoding="utf-8")
 
 
-def clear(pid: int | None = None) -> None:
-    """Kaydı siler.
+def clear(pid: int) -> None:
+    """Bir sürecin kaydını siler; diğerlerine dokunmaz."""
+    (state_dir() / str(pid)).unlink(missing_ok=True)
 
-    `pid` verilirse yalnızca kayıt o sürece aitse silinir; böylece art arda
-    çalışan iki Pakize birbirinin kaydını düşürmez.
+
+def running_pids() -> list[int]:
+    """Kayıtlı ve hâlâ yaşayan Pakize süreçleri; en yeniden eskiye.
+
+    Bayat kayıtlar sessizce temizlenir.
     """
-    path = state_path()
-    if pid is not None and _read_pid(path) != pid:
-        return
-    path.unlink(missing_ok=True)
+    directory = state_dir()
+    if not directory.is_dir():
+        return []
+
+    yasayanlar: list[tuple[float, int]] = []
+    for entry in directory.iterdir():
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        if not _is_pakize(pid):
+            entry.unlink(missing_ok=True)
+            continue
+        yasayanlar.append((entry.stat().st_mtime, pid))
+
+    return [pid for _, pid in sorted(yasayanlar, reverse=True)]
 
 
 def running_pid() -> int | None:
-    """Kayıtlı ve hâlâ yaşayan Pakize sürecini döner; yoksa None.
-
-    Bayat kayıt bulunursa sessizce temizlenir.
-    """
-    path = state_path()
-    pid = _read_pid(path)
-    if pid is None:
-        return None
-    if not _is_pakize(pid):
-        path.unlink(missing_ok=True)
-        return None
-    return pid
+    """En son kaydedilen yaşayan süreç; yoksa None."""
+    pids = running_pids()
+    return pids[0] if pids else None
 
 
 PLAYER_COMM = "ffplay"
@@ -162,13 +173,6 @@ def _parse_stat_line(satir: str) -> tuple[str, str, int] | None:
     try:
         return comm, alanlar[0], int(alanlar[1])
     except ValueError:
-        return None
-
-
-def _read_pid(path: Path) -> int | None:
-    try:
-        return int(path.read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
         return None
 
 

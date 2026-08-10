@@ -255,7 +255,7 @@ def test_oturum_kaydi_yoksa_hata_gosterilir(cikti_dizini, monkeypatch):
 
 def test_dur_calan_sureci_sonlandirir(monkeypatch):
     durdurulan: list[int] = []
-    monkeypatch.setattr(cli.runtime, "running_pid", lambda: 4242)
+    monkeypatch.setattr(cli.runtime, "running_pids", lambda: [4242])
     monkeypatch.setattr(
         cli.runtime, "stop", lambda pid: bool(durdurulan.append(pid) or True)
     )
@@ -268,7 +268,7 @@ def test_dur_calan_sureci_sonlandirir(monkeypatch):
 
 
 def test_dur_calan_yoksa_bilgi_verir(monkeypatch):
-    monkeypatch.setattr(cli.runtime, "running_pid", lambda: None)
+    monkeypatch.setattr(cli.runtime, "running_pids", lambda: [])
 
     sonuc = runner.invoke(cli.app, ["dur"])
 
@@ -277,7 +277,7 @@ def test_dur_calan_yoksa_bilgi_verir(monkeypatch):
 
 
 def test_dur_surec_arada_olmusse_bilgi_verir(monkeypatch):
-    monkeypatch.setattr(cli.runtime, "running_pid", lambda: 4242)
+    monkeypatch.setattr(cli.runtime, "running_pids", lambda: [4242])
     monkeypatch.setattr(cli.runtime, "stop", lambda pid: False)
 
     sonuc = runner.invoke(cli.app, ["dur"])
