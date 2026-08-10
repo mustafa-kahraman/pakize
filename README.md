@@ -4,6 +4,12 @@ Metni ses dosyasına çeviren yerel araç. Markdown'ı anlar: **kod bloklarını
 okumaz**, yerlerine kısa bir anons koyar; tabloları, bağlantıları ve biçim
 işaretlerini de politikaya göre eler.
 
+- **Kaynaklar** — dosya, pano, stdin ya da Claude Code oturum kaydı
+- **Kitap** — EPUB/PDF/MOBI'yi bölüm bölüm seslendirir, yarıda kalırsa devam eder
+- **Çeviri** — seslendirmeden önce hedef dile çevirir
+- **Motorlar** — edge-tts (çevrimiçi, kaliteli), ağ yoksa Piper'a düşer
+- **Denetim** — klavye kısayoluyla oku, duraklat, durdur
+
 ## Kurulum
 
 Gereksinimler: Python 3.10+, [uv](https://docs.astral.sh/uv/), `ffmpeg`.
@@ -22,6 +28,24 @@ uv tool install --editable .
 
 Bu, `~/.local/bin/pakize` çalıştırılabilirini oluşturur. Kaldırmak için:
 `uv tool uninstall pakize`.
+
+### Paketleme
+
+Dağıtılabilir paketleri üretmek için:
+
+```bash
+uv build          # dist/ altına .whl ve .tar.gz yazar
+```
+
+Başka bir makineye kurmak:
+
+```bash
+uv tool install dist/pakize-0.1.0-py3-none-any.whl
+```
+
+Paket yalnızca Python bağımlılıklarını taşır. `ffmpeg` her kurulumda,
+`calibre` kitap biçimleri için, `xclip` pano için, `piper` çevrimdışı yedek
+için ayrıca gerekir.
 
 ## Kullanım
 
@@ -239,67 +263,88 @@ tipine uygun olan kendiliğinden seçilir.
 sudo apt install xclip      # X11 için
 ```
 
-### Arayüzden
-
-**Ayarlar → Klavye → Klavye Kısayollarını Görüntüle ve Özelleştir → Özel
-Kısayollar → +**
-
-| Alan | Değer |
-|------|-------|
-| Ad | `Pakize: panodakini oku` |
-| Komut | `/home/mustafa/.local/bin/pakize speak --clipboard` |
-| Kısayol | tercihin (örn. `Super+Alt+P`) |
-
-> Komutta **tam yol** kullan. Kısayollar `~/.local/bin` dizinini `PATH`'te
-> göremeyebilir.
-
-### Terminalden
-
-Aşağıdaki blok mevcut özel kısayolları silmeden yenisini ekler:
-
-```bash
-ANAHTAR=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pakize/
-YOL=org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$ANAHTAR
-
-MEVCUT=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)
-case "$MEVCUT" in
-  *"$ANAHTAR"*) ;;                                    # zaten ekli
-  "@as []"|"[]") YENI="['$ANAHTAR']" ;;
-  *) YENI="${MEVCUT%]}, '$ANAHTAR']" ;;
-esac
-[ -n "$YENI" ] && gsettings set org.gnome.settings-daemon.plugins.media-keys \
-  custom-keybindings "$YENI"
-
-gsettings set "$YOL" name 'Pakize: panodakini oku'
-gsettings set "$YOL" command "$HOME/.local/bin/pakize speak --clipboard"
-gsettings set "$YOL" binding '<Super><Alt>p'
-```
-
-Kaldırmak için `gsettings reset-recursively "$YOL"` çalıştır ve kısayolu
-listeden çıkar.
-
-### Duraklatma ve durdurma kısayolları
-
-Kısayoldan tetiklediğinde ortada terminal olmaz; Ctrl+C ile durduramazsın. Bu
-yüzden iki kısayol daha bağla:
+Üç kısayol yeterli. `duraklat` tek başına hem duraklatır hem sürdürür, o
+yüzden "devam et" için ayrı bir tuşa gerek yok:
 
 | Ad | Komut | Kısayol örneği |
 |----|-------|----------------|
-| `Pakize: son cevabı oku` | `/home/mustafa/.local/bin/pakize speak --transcript` | `Super+Alt+O` |
-| `Pakize: duraklat` | `/home/mustafa/.local/bin/pakize duraklat` | `Super+Alt+Space` |
-| `Pakize: durdur` | `/home/mustafa/.local/bin/pakize dur` | `Super+Alt+D` |
+| `Pakize: panodakini oku` | `pakize speak --clipboard` | `Super+S` |
+| `Pakize: duraklat` | `pakize duraklat` | `Super+Space` |
+| `Pakize: durdur` | `pakize dur` | `Shift+Super+D` |
 
-> `--transcript` kısayolu, komutun çalıştığı dizine göre oturum seçer. Kısayol
-> ev dizininde çalıştığı için bu yalnızca `~` projesinin kaydını bulur;
-> belirli bir proje için komuta `--session /yol/oturum.jsonl` ekle.
+### Arayüzden
 
-`duraklat` tek başına hem duraklatır hem sürdürür — aynı tuşa basıp devam
-edersin, ikinci bir kısayola gerek yok.
+**Ayarlar → Klavye → Klavye Kısayollarını Görüntüle ve Özelleştir → Özel
+Kısayollar → +** — her satır için bir kısayol ekle.
 
-İkisi de yalnızca Pakize'nin başlattığı çalmayı yönetir; sistemdeki başka
-`ffplay` süreçlerine dokunmaz. Çalan bir şey yoksa "Çalan bir seslendirme yok."
-der. Duraklatılmışken `dur` çalışır. Terminalden çalıştırdığında Ctrl+C de
-durdurur.
+### Terminalden
+
+Aynı işi yapar; Ayarlar ekranı da bu gsettings anahtarlarına yazar.
+
+```bash
+KOK=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings
+SEMA=org.gnome.settings-daemon.plugins.media-keys.custom-keybinding
+
+kur() {  # kur <anahtar> <komut> <tuş> <ad>
+  YOL="$KOK/$1/"
+  gsettings set "$SEMA:$YOL" name "$4"
+  gsettings set "$SEMA:$YOL" command "$2"
+  gsettings set "$SEMA:$YOL" binding "$3"
+  echo "'$YOL'"
+}
+
+YOLLAR=$(
+  kur pakize-oku      "pakize speak --clipboard" '<Super>s'        'Pakize: panodakini oku'
+  kur pakize-duraklat "pakize duraklat"          '<Super>space'    'Pakize: duraklat'
+  kur pakize-dur      "pakize dur"               '<Shift><Super>d' 'Pakize: durdur'
+)
+gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
+  "[$(echo $YOLLAR | tr ' ' ',')]"
+```
+
+> Bu blok listeyi **baştan yazar**. Başka özel kısayolların varsa önce
+> `gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings`
+> ile mevcut listeyi al ve yenileri onun üzerine ekle.
+
+Kaldırmak için her yol için `gsettings reset-recursively "$SEMA:$YOL"` çalıştır
+ve listeyi `"@as []"` yap.
+
+### Tam yol gerekir mi?
+
+Genelde gerekmez: GNOME kısayolları oturumun `PATH`'ini miras alır ve Ubuntu'da
+`~/.local/bin` orada bulunur. Kontrol et:
+
+```bash
+tr '\0' '\n' < /proc/$(pgrep -x gnome-shell | head -1)/environ | grep ^PATH=
+```
+
+Çıktıda `~/.local/bin` yoksa komutlarda tam yol kullan:
+`/home/<kullanıcı>/.local/bin/pakize speak --clipboard`.
+
+### Tuş çakışması
+
+`Super+Space` bazı kurulumlarda klavye düzeni değiştirmeye bağlıdır. Boş
+olduğundan emin ol:
+
+```bash
+gsettings get org.gnome.desktop.wm.keybindings switch-input-source
+```
+
+`@as []` dönerse boştur.
+
+### Bilinmesi gerekenler
+
+Kısayoldan tetiklediğinde ortada terminal olmaz; **hata mesajını göremezsin**.
+Pano boşsa ya da ağ yoksa sessizce hiçbir şey olmaz. Ses gelmezse terminalde
+`pakize speak -c` yazıp sebebi gör.
+
+`duraklat` ve `dur` yalnızca Pakize'nin başlattığı çalmayı yönetir; sistemdeki
+başka `ffplay` süreçlerine dokunmaz. Duraklatılmışken `dur` çalışır. Terminalden
+çalıştırdığında Ctrl+C de durdurur.
+
+`--transcript` kısayola pek uygun değil: oturumu **çalışma dizinine** göre
+seçer, kısayol ise ev dizininde çalışır. Bağlamak istersen komuta
+`--session /yol/oturum.jsonl` ekle.
 
 Bu komutlar `pakize son` ile başlattığın çalmayı da yönetir.
 

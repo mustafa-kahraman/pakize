@@ -11,6 +11,10 @@ __pycache__/
 # Yerel ayarlar ve gizli değerler
 .env
 
-# Üretilen ses dosyaları
+# Üretilen ses dosyaları ve oynatma listeleri
 *.mp3
 *.wav
+*.m3u
+
+# Paketleme çıktısı
+dist/
