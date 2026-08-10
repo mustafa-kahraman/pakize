@@ -21,7 +21,14 @@ from .config import Config, config_path, load_config, write_default_config
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
 from .pipeline import plan_speech, synthesize
-from .sources import ClipboardError, read_clipboard
+from .sources import (
+    ClipboardError,
+    Roles,
+    TranscriptError,
+    collect,
+    latest_session,
+    read_clipboard,
+)
 
 app = typer.Typer(
     help="Metni ses dosyasına çevirir; kod bloklarını okumaz.",
@@ -51,6 +58,32 @@ def speak(
     clipboard: bool = typer.Option(
         False, "--clipboard", "-c", help="Metni panodan al."
     ),
+    transcript: bool = typer.Option(
+        False,
+        "--transcript",
+        "-t",
+        help="Metni bu dizinin Claude Code oturum kaydından al.",
+    ),
+    last: int = typer.Option(
+        1,
+        "--last",
+        "-n",
+        help="Transkriptten kaç söz sırası okunsun. 0 = tamamı.",
+        min=0,
+    ),
+    roles: Roles = typer.Option(
+        Roles.ASSISTANT.value,
+        "--roles",
+        help="Transkriptte hangi konuşmacılar okunsun.",
+    ),
+    session: Path = typer.Option(
+        None,
+        "--session",
+        help="Belirli bir oturum kaydı dosyası (varsayılan: en yenisi).",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+    ),
     output: Path = typer.Option(
         None, "--output", "-o", help="Üretilecek ses dosyasının yolu."
     ),
@@ -73,14 +106,20 @@ def speak(
 ) -> None:
     """Bir metni seslendirir."""
     try:
-        text = _read_source(source, clipboard)
-    except ClipboardError as exc:
+        text = _read_source(
+            source,
+            clipboard=clipboard,
+            transcript=transcript,
+            last=last,
+            roles=roles,
+            session=session,
+        )
+    except (ClipboardError, TranscriptError) as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
 
     if not text.strip():
-        nereden = "Pano boş." if clipboard else "Girdi boş."
-        typer.secho(nereden, fg=typer.colors.RED, err=True)
+        typer.secho(_bos_girdi_mesaji(clipboard, transcript), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
 
     config = _resolved_config(voice=voice, rate=rate, engine=engine, stream=stream)
@@ -263,20 +302,38 @@ def show_config(
         typer.echo(f"  {segment_type.value:<18} {action.value}")
 
 
-def _read_source(source: Path | None, clipboard: bool = False) -> str:
-    """Metni; panodan, dosyadan ya da stdin'den okur (bu öncelikle)."""
+def _read_source(
+    source: Path | None,
+    clipboard: bool = False,
+    transcript: bool = False,
+    last: int = 1,
+    roles: Roles = Roles.ASSISTANT,
+    session: Path | None = None,
+) -> str:
+    """Metni kaynaklardan birinden okur; öncelik sırası buradaki sıradır."""
+    if transcript or session is not None:
+        kayit = session or latest_session(Path.cwd())
+        # 0, "tamamı" demek; collect None bekliyor.
+        return collect(kayit, last=last or None, roles=roles)
     if clipboard:
         return read_clipboard()
     if source is not None:
         return source.read_text(encoding="utf-8")
     if sys.stdin.isatty():
         typer.secho(
-            "Bir dosya yolu ver, --clipboard kullan ya da metni stdin'den aktar.",
+            "Bir dosya yolu ver, --clipboard/--transcript kullan "
+            "ya da metni stdin'den aktar.",
             fg=typer.colors.RED,
             err=True,
         )
         raise typer.Exit(code=1)
     return sys.stdin.read()
+
+
+def _bos_girdi_mesaji(clipboard: bool, transcript: bool) -> str:
+    if transcript:
+        return "Transkriptte okunacak bir konuşma bulunamadı."
+    return "Pano boş." if clipboard else "Girdi boş."
 
 
 def _resolved_config(

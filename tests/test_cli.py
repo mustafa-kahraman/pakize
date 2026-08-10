@@ -205,6 +205,54 @@ def test_pano_araci_yoksa_hata_gosterilir(cikti_dizini, monkeypatch):
     assert "xclip kurulu değil" in sonuc.stderr
 
 
+def test_transcript_bayragi_oturum_kaydindan_okur(cikti_dizini, tmp_path, monkeypatch):
+    import json
+
+    kayit = tmp_path / "oturum.jsonl"
+    kayit.write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Transkriptten gelen cevap."}],
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli, "latest_session", lambda cwd: kayit)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--transcript", "--dry-run"])
+
+    assert sonuc.exit_code == 0
+    assert "Transkriptten gelen cevap." in sonuc.stdout
+
+
+def test_transcript_bos_ise_anlamli_hata(cikti_dizini, tmp_path, monkeypatch):
+    kayit = tmp_path / "bos.jsonl"
+    kayit.write_text("", encoding="utf-8")
+    monkeypatch.setattr(cli, "latest_session", lambda cwd: kayit)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--transcript"])
+
+    assert sonuc.exit_code == 1
+    assert "okunacak bir konuşma bulunamadı" in sonuc.stderr
+
+
+def test_oturum_kaydi_yoksa_hata_gosterilir(cikti_dizini, monkeypatch):
+    def patla(cwd):
+        raise cli.TranscriptError("oturum kaydı bulunamadı")
+
+    monkeypatch.setattr(cli, "latest_session", patla)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--transcript"])
+
+    assert sonuc.exit_code == 1
+    assert "oturum kaydı bulunamadı" in sonuc.stderr
+
+
 def test_dur_calan_sureci_sonlandirir(monkeypatch):
     durdurulan: list[int] = []
     monkeypatch.setattr(cli.runtime, "running_pid", lambda: 4242)

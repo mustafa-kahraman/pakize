@@ -32,6 +32,9 @@ pakize speak notlar.md
 # Panodan
 pakize speak --clipboard
 
+# Claude Code'un bu dizindeki son cevabından
+pakize speak --transcript
+
 # Borudan
 echo "Okunacak metin" | pakize speak
 
@@ -54,6 +57,10 @@ alabilirsin. `/tmp` yeniden başlatmada temizlendiği için kalıcı arşiv isti
 | Bayrak | Açıklama |
 |--------|----------|
 | `-c, --clipboard` | Metni panodan al |
+| `-t, --transcript` | Metni Claude Code oturum kaydından al |
+| `-n, --last` | Transkriptten kaç söz sırası okunsun (0 = tamamı) |
+| `--roles` | `assistant` (varsayılan), `user` veya `all` |
+| `--session` | Belirli bir oturum kaydı dosyası |
 | `-o, --output` | Üretilecek ses dosyasının yolu |
 | `-v, --voice` | TTS sesi (örn. `tr-TR-AhmetNeural`) |
 | `-r, --rate` | Konuşma hızı çarpanı (örn. `1.15`) |
@@ -75,6 +82,43 @@ pakize voices -l all       # tüm dilleri listele
 pakize config              # etkin ayarları göster
 pakize config --init       # açıklamalı config dosyası oluştur
 ```
+
+## Claude Code transkripti
+
+Kopyala-yapıştır gerekmeden, o dizindeki son Claude Code cevabını dinle:
+
+```bash
+pakize speak --transcript      # son cevap
+pakize speak -t -n 3           # son 3 söz sırası
+pakize speak -t --roles all    # senin mesajların da okunsun
+pakize speak -t -n 0           # oturumun tamamı
+```
+
+Oturum kaydı, bulunduğun dizine göre `~/.claude/projects/` altından seçilir;
+o projenin en son güncellenmiş oturumu kullanılır. Başka bir kaydı okumak için
+`--session /yol/oturum.jsonl`.
+
+### Neyin okunduğu
+
+Kayıt dosyasında konuşmanın yanında araç çağrıları ve çıktıları da durur.
+Okunan yalnızca konuşmadır:
+
+| Kayıt | Durum |
+|-------|-------|
+| Asistanın metin blokları | okunur |
+| Kullanıcının yazdığı mesajlar | `--roles` ile okunur |
+| Düşünme blokları (`thinking`) | atlanır |
+| Araç çağrıları ve çıktıları | atlanır |
+| Alt ajan (sidechain) konuşmaları | atlanır |
+| `<system-reminder>` gibi araç etiketleri | temizlenir |
+
+Tek bir cevap, araya giren araç çağrıları yüzünden onlarca kayda bölünebilir.
+Kullanıcı açısından bunların hepsi tek bir yanıt olduğu için ardışık aynı
+rolden kayıtlar tek söz sırasında birleştirilir — `-n 1` cevabın tamamını verir,
+son cümlesini değil.
+
+`--roles all` seçildiğinde araya kimin konuştuğunu belirten kısa bir ayraç
+konur ("Kullanıcı:", "Asistan:"); tek rol okunurken ayraç konmaz.
 
 ## Klavye kısayolu (GNOME)
 
@@ -133,8 +177,13 @@ yüzden iki kısayol daha bağla:
 
 | Ad | Komut | Kısayol örneği |
 |----|-------|----------------|
+| `Pakize: son cevabı oku` | `/home/mustafa/.local/bin/pakize speak --transcript` | `Super+Alt+O` |
 | `Pakize: duraklat` | `/home/mustafa/.local/bin/pakize duraklat` | `Super+Alt+Space` |
 | `Pakize: durdur` | `/home/mustafa/.local/bin/pakize dur` | `Super+Alt+D` |
+
+> `--transcript` kısayolu, komutun çalıştığı dizine göre oturum seçer. Kısayol
+> ev dizininde çalıştığı için bu yalnızca `~` projesinin kaydını bulur;
+> belirli bir proje için komuta `--session /yol/oturum.jsonl` ekle.
 
 `duraklat` tek başına hem duraklatır hem sürdürür — aynı tuşa basıp devam
 edersin, ikinci bir kısayola gerek yok.
