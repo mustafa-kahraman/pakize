@@ -23,14 +23,17 @@ class EdgeEngine(TtsEngine):
             raise EngineUnavailable("edge motoru için bir ses adı gerekli")
 
     async def synthesize(self, text: str, destination: Path) -> None:
-        communicate = edge_tts.Communicate(
-            text,
-            voice=self.config.voice,
-            rate=self.config.rate_percent(),
-            volume=self.config.volume_percent(),
-            pitch=self.config.pitch_spec(),
-        )
+        # Kurucu da doğrulama yapıp hata fırlatıyor (geçersiz ses adı gibi);
+        # bu yüzden nesne oluşturma da sarmalın içinde olmalı. Aksi hâlde ham
+        # traceback dökülür ve yedek motora hiç geçilmez.
         try:
+            communicate = edge_tts.Communicate(
+                text,
+                voice=self.config.voice,
+                rate=self.config.rate_percent(),
+                volume=self.config.volume_percent(),
+                pitch=self.config.pitch_spec(),
+            )
             await communicate.save(str(destination))
         except Exception as exc:  # edge-tts ağ/protokol hatalarını çeşitlendirir
             raise EngineError(f"edge-tts seslendirme başarısız: {exc}") from exc

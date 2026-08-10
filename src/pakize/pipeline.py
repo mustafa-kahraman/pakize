@@ -99,19 +99,21 @@ async def synthesize_async(
             "segmentlerden oluşuyor olabilir"
         )
 
-    last_error: EngineError | None = None
+    # Hepsi başarısız olursa birincil motorun hatası gösterilir: yedeğin
+    # "kurulu değil" mesajı, asıl sorunun ne olduğunu gizlerdi.
+    primary_error: EngineError | None = None
     for engine_name in _engine_order(config):
         try:
             await _render_with_engine(
                 engine_name, plan, destination, config, progress, on_part_ready
             )
         except EngineError as exc:
-            last_error = exc
+            primary_error = primary_error or exc
             continue
         return SpeechResult(output=destination, plan=plan, engine=engine_name)
 
-    assert last_error is not None
-    raise last_error
+    assert primary_error is not None
+    raise primary_error
 
 
 def _engine_order(config: Config) -> list[str]:

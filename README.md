@@ -268,6 +268,41 @@ Yolun tamamen atlanmasını istersen `file_path = "skip"` yaz.
 Yol sayılmak için en az bir `/` ve uzantılı bir son bileşen gerekir; bu sayede
 `ve/veya` ya da `TR/EN` gibi ifadeler bozulmaz.
 
+## Çevrimdışı yedek: Piper
+
+`edge-tts` internete ve Microsoft'un resmî olmayan bir ucuna bağımlıdır. Piper
+yerelde çalışır; ağ yoksa ya da servis bozulursa Pakize kendiliğinden ona düşer
+ve bunu söyler:
+
+```
+Not: edge motoru çalışmadı, piper kullanıldı.
+```
+
+Kurulum iki parçadır — çalıştırılabilir ve ses modeli:
+
+```bash
+uv tool install piper-tts
+```
+
+Türkçe ses modelini [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main/tr/tr_TR)
+adresinden indir (`.onnx` ve yanındaki `.onnx.json` birlikte durmalı), sonra
+config'e yaz:
+
+```toml
+fallback_engine = "piper"
+piper_model = "/yol/tr_TR-dfki-medium.onnx"
+piper_binary = "/yol/piper"        # boşsa PATH'te aranır
+```
+
+Yalnızca Piper kullanmak için `engine = "piper"` yaz ya da `--engine piper` ver.
+
+Piper WAV üretir; hedef dosya `.mp3` ise birleştirme sırasında dönüştürülür.
+Hız ayarı her iki motorda da aynı `rate` alanından gelir — Piper hızı süre
+üzerinden ifade ettiği için değer içeride ters çevrilir.
+
+İki motor da çalışmazsa **birincil motorun** hatası gösterilir; yedeğin
+"kurulu değil" mesajı asıl sorunu gizlerdi.
+
 ## Ondalık sayılar
 
 Türkçe'de ondalık ayracı virgüldür. `1.15` yazımı TTS motoruna Türkçe

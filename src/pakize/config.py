@@ -49,7 +49,7 @@ class Config:
     engine: str = "edge"
     """Birincil motor: "edge" veya "piper"."""
 
-    fallback_engine: str | None = None
+    fallback_engine: str | None = "piper"
     """Birincil motor başarısız olursa denenecek motor; None ise yedek yok."""
 
     rate: float = 1.15
@@ -79,6 +79,9 @@ class Config:
 
     piper_model: Path | None = None
     """Piper ses modelinin (.onnx) yolu; None ise Piper motoru kullanılamaz."""
+
+    piper_binary: Path | None = None
+    """Piper çalıştırılabilirinin yolu; None ise PATH üzerinden aranır."""
 
     def rate_percent(self) -> str:
         """Hız çarpanını edge-tts'in beklediği `+15%` biçimine çevirir.
@@ -141,7 +144,7 @@ def _apply_overrides(base: Config, data: dict) -> Config:
         if key in data and data[key] is not None:
             overrides[key] = caster(data[key])
 
-    for key in ("piper_model", "output_dir"):
+    for key in ("piper_model", "piper_binary", "output_dir"):
         if data.get(key):
             overrides[key] = Path(str(data[key])).expanduser()
 
@@ -164,6 +167,7 @@ _FIELD_NOTES: dict[str, str] = {
     "stream": "ilk parça hazır olunca çalmaya başla, hepsini bekleme",
     "normalize_decimals": "1.15 → 1,15 (Türkçe'de ondalık ayracı virgüldür)",
     "piper_model": "Piper ses modelinin (.onnx) yolu",
+    "piper_binary": "piper çalıştırılabiliri; boşsa PATH'te aranır",
 }
 """Üretilen config dosyasındaki açıklama satırları.
 
@@ -234,8 +238,8 @@ def _yorumla(satir: str, aciklama: str) -> str:
 
 
 _ORNEK_DEGERLER: dict[str, object] = {
-    "fallback_engine": "piper",
-    "piper_model": "~/.local/share/piper/tr_TR-fettah-medium.onnx",
+    "piper_model": "~/.local/share/piper/tr_TR-dfki-medium.onnx",
+    "piper_binary": "~/.local/bin/piper",
 }
 """Varsayılanı tanımsız olan ayarlar için yorumda gösterilecek örnek değerler."""
 

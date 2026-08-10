@@ -27,15 +27,17 @@ class AudioError(RuntimeError):
 def concat(parts: list[Path], destination: Path) -> Path:
     """Ses parçalarını sırayı koruyarak tek dosyada birleştirir.
 
-    Parçaların tümü aynı motordan ve aynı kodekten geldiği için yeniden
-    kodlamaya gerek yoktur; `-c copy` hem hızlı hem kayıpsızdır.
+    Parçalar hedefle aynı biçimdeyse yeniden kodlanmaz; `-c copy` hem hızlı
+    hem kayıpsızdır. Biçim farklıysa (Piper WAV üretir, hedef ise .mp3 olabilir)
+    dönüştürme yapılır — aksi hâlde uzantısı mp3 olan bir WAV dosyası çıkardı.
     """
     if not parts:
         raise AudioError("Birleştirilecek ses parçası yok")
 
     destination.parent.mkdir(parents=True, exist_ok=True)
+    donusum_gerekli = _needs_transcode(parts, destination)
 
-    if len(parts) == 1:
+    if len(parts) == 1 and not donusum_gerekli:
         shutil.copyfile(parts[0], destination)
         return destination
 
@@ -59,8 +61,7 @@ def concat(parts: list[Path], destination: Path) -> Path:
                 "0",
                 "-i",
                 str(list_file),
-                "-c",
-                "copy",
+                *_codec_args(donusum_gerekli),
                 str(destination),
             ]
         )
@@ -68,6 +69,16 @@ def concat(parts: list[Path], destination: Path) -> Path:
         list_file.unlink(missing_ok=True)
 
     return destination
+
+
+def _needs_transcode(parts: list[Path], destination: Path) -> bool:
+    """Parçaların biçimi hedefinkinden farklı mı?"""
+    hedef = destination.suffix.lower()
+    return any(part.suffix.lower() != hedef for part in parts)
+
+
+def _codec_args(donusum_gerekli: bool) -> list[str]:
+    return ["-vn"] if donusum_gerekli else ["-c", "copy"]
 
 
 def play(path: Path) -> None:

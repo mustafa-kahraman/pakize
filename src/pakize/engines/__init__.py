@@ -9,9 +9,11 @@ from __future__ import annotations
 from ..config import Config
 from .base import EngineError, EngineUnavailable, TtsEngine
 from .edge import EdgeEngine
+from .piper import PiperEngine
 
 _REGISTRY: dict[str, type[TtsEngine]] = {
     EdgeEngine.name: EdgeEngine,
+    PiperEngine.name: PiperEngine,
 }
 
 
@@ -33,6 +35,7 @@ __all__ = [
     "EngineError",
     "EngineUnavailable",
     "EdgeEngine",
+    "PiperEngine",
     "create_engine",
     "available_engines",
 ]

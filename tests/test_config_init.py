@@ -35,10 +35,17 @@ def test_her_segment_tipi_dosyada_yer_alir(tmp_path):
 def test_tanimsiz_ayarlar_yorum_olarak_yazilir():
     icerik = render_default_config()
 
-    # fallback_engine ve piper_model varsayılanda tanımsız; TOML'da boş değer
-    # olmadığı için örnek olarak yorumda dururlar.
-    assert "# fallback_engine =" in icerik
+    # Piper yolları varsayılanda tanımsız; TOML'da boş değer olmadığı için
+    # örnek değerleriyle yorum satırı olarak dururlar.
     assert "# piper_model =" in icerik
+    assert "# piper_binary =" in icerik
+
+
+def test_tanimli_ayarlar_yorumlanmadan_yazilir():
+    icerik = render_default_config()
+
+    assert 'fallback_engine = "piper"' in icerik
+    assert "# fallback_engine" not in icerik
 
 
 def test_aciklamalar_degere_yapismaz():

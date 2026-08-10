@@ -103,6 +103,50 @@ def test_stop_playback_calan_sureci_sonlandirir(sinyal_yakala):
     assert sinyal_yakala == [(sahte.pid, signal.SIGCONT)]
 
 
+def test_ayni_bicimdeki_parcalar_yeniden_kodlanmaz(tmp_path, monkeypatch):
+    komutlar: list[list[str]] = []
+    monkeypatch.setattr(audio, "_require_binary", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(audio, "_run", lambda command: komutlar.append(command))
+
+    parts = [tmp_path / "0.mp3", tmp_path / "1.mp3"]
+    for part in parts:
+        part.write_bytes(b"ses")
+
+    audio.concat(parts, tmp_path / "cikti.mp3")
+
+    assert "-c" in komutlar[0] and "copy" in komutlar[0]
+
+
+def test_farkli_bicimdeki_parcalar_donusturulur(tmp_path, monkeypatch):
+    """Piper WAV üretir; hedef .mp3 ise kopyalamak uzantısı yalan söyleyen
+    bir dosya bırakırdı."""
+    komutlar: list[list[str]] = []
+    monkeypatch.setattr(audio, "_require_binary", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(audio, "_run", lambda command: komutlar.append(command))
+
+    parts = [tmp_path / "0.wav", tmp_path / "1.wav"]
+    for part in parts:
+        part.write_bytes(b"ses")
+
+    audio.concat(parts, tmp_path / "cikti.mp3")
+
+    assert "copy" not in komutlar[0]
+
+
+def test_tek_wav_parca_da_mp3ye_donusturulur(tmp_path, monkeypatch):
+    komutlar: list[list[str]] = []
+    monkeypatch.setattr(audio, "_require_binary", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(audio, "_run", lambda command: komutlar.append(command))
+
+    part = tmp_path / "0.wav"
+    part.write_bytes(b"ses")
+
+    audio.concat([part], tmp_path / "cikti.mp3")
+
+    # Kopyalama değil dönüştürme yapılmalı; ffmpeg çağrılmış olmalı.
+    assert komutlar and "copy" not in komutlar[0]
+
+
 def test_stop_playback_calan_yoksa_false():
     assert audio.stop_playback() is False
 
