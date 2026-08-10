@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import signal
 import subprocess
@@ -108,11 +109,27 @@ def stop_playback() -> bool:
         process = _player
     if process is None:
         return False
+
+    # Sıra önemli: devam sinyali sonlandırmadan ÖNCE gitmeli.
+    _resume(process)
     try:
         process.terminate()
     except (ProcessLookupError, OSError):
         return False
     return True
+
+
+def _resume(process) -> None:
+    """Duraklatılmış olabilecek sürece devam sinyali gönderir.
+
+    `pakize duraklat` ile durdurulmuş bir süreç SIGTERM'i işleyemez. Beklemede
+    bırakıp sonradan devam ettirmek yetmiyor: ffplay bu durumda sinyali yutup
+    çalmayı sürdürüyor. Önce devam ettirip sonra sonlandırmak gerekiyor.
+    """
+    try:
+        os.kill(process.pid, signal.SIGCONT)
+    except (ProcessLookupError, PermissionError, OSError):
+        return
 
 
 def _set_player(process) -> None:

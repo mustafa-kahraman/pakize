@@ -73,6 +73,23 @@ def test_son_ses_yoksa_anlamli_hata(cikti_dizini, calinanlar):
     assert calinanlar == []
 
 
+def test_son_calarken_surec_kaydedilir(cikti_dizini, monkeypatch):
+    """`son` ile çalan ses de `pakize dur`/`duraklat` ile yönetilebilmeli."""
+    _ses_yaz(cikti_dizini, "kayit.mp3", mtime=2_000)
+    kayitli: list[int | None] = []
+
+    monkeypatch.setattr(cli.runtime, "_is_pakize", lambda pid: True)
+    monkeypatch.setattr(
+        cli.audio, "play", lambda path: kayitli.append(cli.runtime.running_pid())
+    )
+
+    sonuc = runner.invoke(cli.app, ["son"])
+
+    assert sonuc.exit_code == 0
+    assert kayitli == [os.getpid()]
+    assert cli.runtime.running_pid() is None
+
+
 def test_son_ses_disi_dosyalari_yoksayar(cikti_dizini, calinanlar):
     _ses_yaz(cikti_dizini, "notlar.txt", mtime=3_000)
     ses = _ses_yaz(cikti_dizini, "kayit.mp3", mtime=2_000)

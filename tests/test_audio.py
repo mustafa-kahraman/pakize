@@ -19,6 +19,7 @@ class SahteSurec:
         self.returncode = returncode
         self._stderr = stderr
         self.terminate_edildi = False
+        self.pid = 999_999
 
     def communicate(self):
         return (b"", self._stderr)
@@ -32,6 +33,18 @@ def temiz_kayit():
     """Her testten sonra modül düzeyindeki çalan süreç kaydını temizler."""
     yield
     audio._player = None
+
+
+@pytest.fixture(autouse=True)
+def sinyal_yakala(monkeypatch) -> list[tuple[int, int]]:
+    """`os.kill`'i yamalar.
+
+    Sahte süreç numarasına gerçek sinyal göndermek başka bir süreci
+    vurabilirdi; testler asla gerçek sinyal göndermemeli.
+    """
+    gonderilen: list[tuple[int, int]] = []
+    monkeypatch.setattr(audio.os, "kill", lambda pid, sig: gonderilen.append((pid, sig)))
+    return gonderilen
 
 
 @pytest.fixture
@@ -80,12 +93,14 @@ def test_gercek_hata_yukselir(surec, tmp_path):
         audio.play(tmp_path / "ses.mp3")
 
 
-def test_stop_playback_calan_sureci_sonlandirir():
+def test_stop_playback_calan_sureci_sonlandirir(sinyal_yakala):
     sahte = SahteSurec()
     audio._set_player(sahte)
 
     assert audio.stop_playback() is True
     assert sahte.terminate_edildi is True
+    # Duraklatılmış olma ihtimaline karşı, sonlandırmadan önce devam sinyali.
+    assert sinyal_yakala == [(sahte.pid, signal.SIGCONT)]
 
 
 def test_stop_playback_calan_yoksa_false():

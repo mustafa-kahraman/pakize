@@ -65,6 +65,7 @@ alabilirsin. `/tmp` yeniden başlatmada temizlendiği için kalıcı arşiv isti
 ### Diğer komutlar
 
 ```bash
+pakize duraklat            # çalmayı duraklat; duraklatılmışsa sürdür (aynı komut)
 pakize dur                 # çalmakta olan seslendirmeyi durdur
 pakize son                 # en son üretilen sesi yeniden çal
 pakize son --list          # son üretilen sesleri tarihiyle listele
@@ -125,20 +126,25 @@ gsettings set "$YOL" binding '<Super><Alt>p'
 Kaldırmak için `gsettings reset-recursively "$YOL"` çalıştır ve kısayolu
 listeden çıkar.
 
-### Durdurma kısayolu
+### Duraklatma ve durdurma kısayolları
 
 Kısayoldan tetiklediğinde ortada terminal olmaz; Ctrl+C ile durduramazsın. Bu
-yüzden ikinci bir kısayol daha bağla:
+yüzden iki kısayol daha bağla:
 
-| Alan | Değer |
-|------|-------|
-| Ad | `Pakize: durdur` |
-| Komut | `/home/mustafa/.local/bin/pakize dur` |
-| Kısayol | tercihin (örn. `Super+Alt+D`) |
+| Ad | Komut | Kısayol örneği |
+|----|-------|----------------|
+| `Pakize: duraklat` | `/home/mustafa/.local/bin/pakize duraklat` | `Super+Alt+Space` |
+| `Pakize: durdur` | `/home/mustafa/.local/bin/pakize dur` | `Super+Alt+D` |
 
-`pakize dur` yalnızca Pakize'nin başlattığı çalmayı sonlandırır; sistemdeki
-başka `ffplay` süreçlerine dokunmaz. Çalan bir şey yoksa "Çalan bir seslendirme
-yok." der. Terminalden çalıştırdığında Ctrl+C de aynı işi görür.
+`duraklat` tek başına hem duraklatır hem sürdürür — aynı tuşa basıp devam
+edersin, ikinci bir kısayola gerek yok.
+
+İkisi de yalnızca Pakize'nin başlattığı çalmayı yönetir; sistemdeki başka
+`ffplay` süreçlerine dokunmaz. Çalan bir şey yoksa "Çalan bir seslendirme yok."
+der. Duraklatılmışken `dur` çalışır. Terminalden çalıştırdığında Ctrl+C de
+durdurur.
+
+Bu komutlar `pakize son` ile başlattığın çalmayı da yönetir.
 
 ### Akıcı çalma
 

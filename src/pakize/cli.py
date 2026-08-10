@@ -130,6 +130,31 @@ def speak(
 
 
 @app.command()
+def duraklat() -> None:
+    """Çalmakta olan seslendirmeyi duraklatır; duraklatılmışsa sürdürür.
+
+    Tek komutun iki işi görmesi kasıtlı: klavye kısayolunda aynı tuşla hem
+    durdurup hem devam edebilirsin.
+    """
+    pid = runtime.running_pid()
+    if pid is None:
+        typer.secho("Çalan bir seslendirme yok.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=1)
+
+    if runtime.is_paused(pid):
+        if not runtime.resume(pid):
+            typer.secho("Sürdürülecek bir çalma yok.", fg=typer.colors.YELLOW)
+            raise typer.Exit(code=1)
+        typer.secho("Devam ediyor.", fg=typer.colors.GREEN)
+        return
+
+    if not runtime.pause(pid):
+        typer.secho("Duraklatılacak bir çalma yok.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=1)
+    typer.secho("Duraklatıldı.", fg=typer.colors.GREEN)
+
+
+@app.command()
 def dur() -> None:
     """Çalmakta olan seslendirmeyi durdurur."""
     pid = runtime.running_pid()
@@ -168,7 +193,13 @@ def son(
         return
 
     typer.echo(f"Çalınıyor: {kayitlar[0]}")
-    audio.play(kayitlar[0])
+    try:
+        # Buradan çalan ses de `pakize dur`/`duraklat` ile yönetilebilmeli.
+        with _durdurulabilir(True):
+            audio.play(kayitlar[0])
+    except KeyboardInterrupt:
+        typer.secho("Durduruldu.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=130) from None
 
 
 @app.command()
