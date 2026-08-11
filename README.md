@@ -109,6 +109,28 @@ Ses duyuyorsan kurulum tamamdır.
 
 Kaldırmak için: `uv tool uninstall pakize`.
 
+### Güncelleme
+
+**`git pull` tek başına yetmez.** `--editable` kurulumda kod anında güncellenir
+ama bağımlılık listesi değiştiyse araç ortamı eski kalır ve şuna benzer bir hata
+alırsın:
+
+```
+ModuleNotFoundError: No module named 'psutil'
+```
+
+Yeniden kurmak yeterli — `--force`, var olan kurulumun üzerine yazar:
+
+```bash
+uv tool install --editable . --force
+```
+
+Hazır paketten kurduysan yeni `.whl` dosyasıyla aynı komutu çalıştır:
+
+```bash
+uv tool install pakize-0.2.0-py3-none-any.whl --force
+```
+
 ### İsteğe bağlı araçlar
 
 Yukarıdakiler temel kullanım için yeter. Şu özellikleri kullanacaksan
