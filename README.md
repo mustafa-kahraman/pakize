@@ -13,52 +13,127 @@ işaretlerini de politikaya göre eler.
 
 ## Kurulum
 
-Gereksinimler: Python 3.10+, [uv](https://docs.astral.sh/uv/), `ffmpeg`.
+Linux, macOS ve Windows'ta aynı dört adım. Üçünde de yaklaşık beş dakika sürer.
+
+**Python'u ayrıca kurmana gerek yok** — uv, gerekirse uygun sürümü kendisi
+indirir.
+
+### 1. uv'yi kur
+
+[uv](https://docs.astral.sh/uv/), Python araçlarını kuran ve çalıştıran
+programdır. Zaten varsa bu adımı atla (`uv --version` ile bak).
+
+**Linux / macOS** — terminalde:
 
 ```bash
-sudo apt install ffmpeg          # Linux
-brew install ffmpeg              # macOS
-winget install Gyan.FFmpeg       # Windows
-
-uv sync
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Komutu her dizinden kullanabilmek için sisteme kur. `--editable` sayesinde
-depoda yaptığın değişiklikler anında geçerli olur, yeniden kurmak gerekmez:
+**Windows** — PowerShell'de:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Kurulum bittikten sonra **terminali kapatıp yeniden aç**; `uv` ancak o zaman
+tanınır.
+
+### 2. ffmpeg'i kur
+
+Pakize sesi ffmpeg ile birleştirir ve çalar; onsuz çalışmaz.
+
+**Linux:**
+
+```bash
+sudo apt install ffmpeg
+```
+
+**macOS** ([Homebrew](https://brew.sh) ile):
+
+```bash
+brew install ffmpeg
+```
+
+**Windows** (PowerShell'de):
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+> Windows'ta winget kurulumdan sonra PATH'i günceller ama **açık olan
+> terminaller bunu görmez**. Yeni bir PowerShell aç ve `ffmpeg -version` ile
+> doğrula.
+
+### 3. Pakize'yi kur
+
+**Hazır paket (`.whl` dosyası) aldıysan** — dosyanın bulunduğu dizinde:
+
+```bash
+uv tool install pakize-0.2.0-py3-none-any.whl
+```
+
+**Depodan kuruyorsan** — proje dizininde:
 
 ```bash
 uv tool install --editable .
 ```
 
-Bu, `pakize` çalıştırılabilirini uv'nin araç dizinine koyar — Linux ve macOS'ta
-`~/.local/bin/pakize`, Windows'ta `%USERPROFILE%\.local\bin\pakize.exe`.
+`--editable`, depoda yaptığın değişikliklerin anında geçerli olmasını sağlar;
+her değişiklikte yeniden kurman gerekmez.
+
+Bu komut `pakize` çalıştırılabilirini uv'nin araç dizinine koyar — Linux ve
+macOS'ta `~/.local/bin/pakize`, Windows'ta
+`%USERPROFILE%\.local\bin\pakize.exe`.
+
+### 4. Doğrula
+
+`pakize` komutu tanınmıyorsa araç dizini PATH'te değildir:
+
+```bash
+uv tool update-shell
+```
+
+Sonra terminali yeniden aç. Kurulumun çalıştığını gör:
+
+```bash
+pakize config
+```
+
+Etkin ayarları ve dosya yollarını yazdırır. Gerçek bir deneme (internet ister):
+
+```bash
+echo "Merhaba, ben Pakize." | pakize speak
+```
+
+Ses duyuyorsan kurulum tamamdır.
+
 Kaldırmak için: `uv tool uninstall pakize`.
+
+### İsteğe bağlı araçlar
+
+Yukarıdakiler temel kullanım için yeter. Şu özellikleri kullanacaksan
+karşılarındaki aracı da kur:
+
+| Araç | Ne için | Linux | macOS | Windows |
+|------|---------|-------|-------|---------|
+| `calibre` | EPUB/PDF/MOBI seslendirme | `sudo apt install calibre` | `brew install --cask calibre` | `winget install calibre.calibre` |
+| pano aracı | `--clipboard` | `sudo apt install xclip` | sistemle gelir (`pbpaste`) | sistemle gelir (PowerShell) |
+| `piper` | çevrimdışı yedek motor | `uv tool install piper-tts` | aynı | aynı |
+
+Pakize eksik bir araçla karşılaştığında **bulunduğun platformun** kurulum
+komutunu söyler; hata mesajındaki komutu olduğu gibi çalıştırabilirsin.
 
 ### Paketleme
 
-Dağıtılabilir paketleri üretmek için:
+Başkasına göndermek üzere dağıtılabilir paket üretmek için:
 
 ```bash
 uv build          # dist/ altına .whl ve .tar.gz yazar
 ```
 
-Başka bir makineye kurmak:
-
-```bash
-uv tool install dist/pakize-0.1.0-py3-none-any.whl
-```
-
-Paket yalnızca Python bağımlılıklarını taşır. Harici araçlar ayrıca gerekir:
-
-| Araç | Ne için | Linux | macOS | Windows |
-|------|---------|-------|-------|---------|
-| `ffmpeg` | her kurulumda | `apt install ffmpeg` | `brew install ffmpeg` | `winget install Gyan.FFmpeg` |
-| `calibre` | EPUB/PDF/MOBI | `apt install calibre` | `brew install --cask calibre` | `winget install calibre.calibre` |
-| pano aracı | `--clipboard` | `apt install xclip` | sistemle gelir (`pbpaste`) | sistemle gelir (PowerShell) |
-| `piper` | çevrimdışı yedek | `uv tool install piper-tts` | aynı | aynı |
-
-Pakize eksik bir araçla karşılaştığında **bulunduğun platformun** kurulum
-komutunu söyler; hata mesajındaki komutu olduğu gibi çalıştırabilirsin.
+Üretilen `.whl` dosyasını gönderdiğin kişi yukarıdaki 1-2-3. adımları
+uygulayarak kurar. Paket yalnızca Python bağımlılıklarını taşır; `ffmpeg` ve
+isteğe bağlı araçlar her makinede ayrıca gerekir.
 
 ## Kullanım
 
