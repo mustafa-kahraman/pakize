@@ -12,6 +12,17 @@ from pakize.sources import clipboard
 from pakize.sources.clipboard import ClipboardError, read_clipboard
 
 
+@pytest.fixture(autouse=True)
+def linux_varsayimi(monkeypatch):
+    """Testler varsayılan olarak Linux'ta koşuyormuş gibi davranır.
+
+    Platforma bağlı davranışı sınayan testler bunu kendisi ezer; böylece
+    testin sonucu, koştuğu makineye değil kurduğu senaryoya bağlı kalır.
+    """
+    monkeypatch.setattr(clipboard, "IS_MACOS", False)
+    monkeypatch.setattr(clipboard, "IS_WINDOWS", False)
+
+
 @pytest.fixture
 def kurulu(monkeypatch):
     """Hangi araçların "kurulu" sayılacağını belirleyen yardımcı."""
@@ -65,10 +76,59 @@ def test_x11_oturumunda_xclip_tercih_edilir(kurulu, calistirilan):
     assert calistirilan.kayit[0][0] == "xclip"
 
 
+def test_macoste_pbpaste_tercih_edilir(kurulu, calistirilan, monkeypatch):
+    """XQuartz ile birlikte xclip de kurulu olabilir; doğru cevap pbpaste'te."""
+    monkeypatch.setattr(clipboard, "IS_MACOS", True)
+    kurulu("xclip", "pbpaste", session="")
+
+    read_clipboard()
+
+    assert calistirilan.kayit == [["pbpaste"]]
+
+
+def test_windowsta_powershell_ile_okunur(kurulu, calistirilan, monkeypatch):
+    monkeypatch.setattr(clipboard, "IS_WINDOWS", True)
+    kurulu("powershell", session="")
+
+    read_clipboard()
+
+    komut = calistirilan.kayit[0]
+    assert komut[0] == "powershell"
+    assert "Get-Clipboard -Raw" in komut[-1]
+    # Konsolun kod sayfası Türkçe metni bozar; UTF-8'e sabitlenmeli.
+    assert "UTF8" in komut[-1]
+
+
+def test_pwsh_varsa_eski_powershelle_tercih_edilir(kurulu, calistirilan, monkeypatch):
+    monkeypatch.setattr(clipboard, "IS_WINDOWS", True)
+    kurulu("pwsh", "powershell", session="")
+
+    read_clipboard()
+
+    assert calistirilan.kayit[0][0] == "pwsh"
+
+
 def test_hicbir_arac_yoksa_kurulum_ipucu_verilir(kurulu, calistirilan):
     kurulu()
 
     with pytest.raises(ClipboardError, match="sudo apt install xclip"):
+        read_clipboard()
+
+
+def test_macoste_apt_ipucu_verilmez(kurulu, calistirilan, monkeypatch):
+    """Yanlış paket yöneticisini önermek kullanıcıyı çıkmaza yollar."""
+    monkeypatch.setattr(clipboard, "IS_MACOS", True)
+    kurulu()
+
+    with pytest.raises(ClipboardError, match="pbpaste"):
+        read_clipboard()
+
+
+def test_windowsta_apt_ipucu_verilmez(kurulu, calistirilan, monkeypatch):
+    monkeypatch.setattr(clipboard, "IS_WINDOWS", True)
+    kurulu()
+
+    with pytest.raises(ClipboardError, match="PowerShell"):
         read_clipboard()
 
 
