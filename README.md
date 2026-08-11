@@ -1,3 +1,5 @@
+[English](README.en.md) · **Türkçe**
+
 # Pakize
 
 Metni ses dosyasına çeviren yerel araç. Markdown'ı anlar: **kod bloklarını
