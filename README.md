@@ -9,13 +9,17 @@ işaretlerini de politikaya göre eler.
 - **Çeviri** — seslendirmeden önce hedef dile çevirir
 - **Motorlar** — edge-tts (çevrimiçi, kaliteli), ağ yoksa Piper'a düşer
 - **Denetim** — klavye kısayoluyla oku, duraklat, durdur
+- **Platformlar** — Linux, macOS ve Windows
 
 ## Kurulum
 
 Gereksinimler: Python 3.10+, [uv](https://docs.astral.sh/uv/), `ffmpeg`.
 
 ```bash
-sudo apt install ffmpeg
+sudo apt install ffmpeg          # Linux
+brew install ffmpeg              # macOS
+winget install Gyan.FFmpeg       # Windows
+
 uv sync
 ```
 
@@ -26,8 +30,9 @@ depoda yaptığın değişiklikler anında geçerli olur, yeniden kurmak gerekme
 uv tool install --editable .
 ```
 
-Bu, `~/.local/bin/pakize` çalıştırılabilirini oluşturur. Kaldırmak için:
-`uv tool uninstall pakize`.
+Bu, `pakize` çalıştırılabilirini uv'nin araç dizinine koyar — Linux ve macOS'ta
+`~/.local/bin/pakize`, Windows'ta `%USERPROFILE%\.local\bin\pakize.exe`.
+Kaldırmak için: `uv tool uninstall pakize`.
 
 ### Paketleme
 
@@ -43,9 +48,17 @@ Başka bir makineye kurmak:
 uv tool install dist/pakize-0.1.0-py3-none-any.whl
 ```
 
-Paket yalnızca Python bağımlılıklarını taşır. `ffmpeg` her kurulumda,
-`calibre` kitap biçimleri için, `xclip` pano için, `piper` çevrimdışı yedek
-için ayrıca gerekir.
+Paket yalnızca Python bağımlılıklarını taşır. Harici araçlar ayrıca gerekir:
+
+| Araç | Ne için | Linux | macOS | Windows |
+|------|---------|-------|-------|---------|
+| `ffmpeg` | her kurulumda | `apt install ffmpeg` | `brew install ffmpeg` | `winget install Gyan.FFmpeg` |
+| `calibre` | EPUB/PDF/MOBI | `apt install calibre` | `brew install --cask calibre` | `winget install calibre.calibre` |
+| pano aracı | `--clipboard` | `apt install xclip` | sistemle gelir (`pbpaste`) | sistemle gelir (PowerShell) |
+| `piper` | çevrimdışı yedek | `uv tool install piper-tts` | aynı | aynı |
+
+Pakize eksik bir araçla karşılaştığında **bulunduğun platformun** kurulum
+komutunu söyler; hata mesajındaki komutu olduğu gibi çalıştırabilirsin.
 
 ## Kullanım
 
@@ -71,10 +84,14 @@ pakize speak notlar.md -o cikti.mp3 --no-play
 
 > Sisteme kurmadıysan komutların başına `uv run` ekle ve proje dizininden çalıştır.
 
-Çıktı yolu verilmezse ses `/tmp/pakize/<tarih-saat>.mp3` altına yazılır ve hemen
-çalmaya başlar. Sesler orada birikir; ileride lazım olan bir kaydı oradan
-alabilirsin. `/tmp` yeniden başlatmada temizlendiği için kalıcı arşiv istiyorsan
-`output_dir` ayarını değiştir.
+Çıktı yolu verilmezse ses, sistemin geçici dizini altına `<tarih-saat>.mp3`
+olarak yazılır ve hemen çalmaya başlar — Linux'ta `/tmp/pakize/`, Windows'ta
+`%TEMP%\pakize\`, macOS'ta oturuma özel `/var/folders/.../pakize/`. Etkin yolu
+`pakize config` gösterir.
+
+Sesler orada birikir; ileride lazım olan bir kaydı oradan alabilirsin. Geçici
+dizin yeniden başlatmada temizlendiği için kalıcı arşiv istiyorsan `output_dir`
+ayarını değiştir.
 
 ### Bayraklar
 
@@ -164,7 +181,7 @@ Uzun bir metni bölüm bölüm sese çevirir. Bir kitap 8-10 saatlik ses demek;
 tek dosya yerine her bölüm ayrı yazılır, yanına oynatma listesi bırakılır.
 
 ```bash
-pakize kitap kitap.epub                  # bölümler /tmp/pakize/kitap/ altına
+pakize kitap kitap.epub                  # bölümler geçici dizindeki kitap/ altına
 pakize kitap kitap.pdf -o ~/Müzik/kitap  # başka bir dizine
 pakize kitap kitap.md --dry-run          # bölüm listesini gör, ses üretme
 pakize kitap kitap.epub -l 1             # yalnızca '#' başlıkları bölüm sayılsın
@@ -201,8 +218,14 @@ baştan üretmek için `--force`.
 tanıdığı diğer biçimler `ebook-convert` ile Markdown'a çevrilir:
 
 ```bash
-sudo apt install calibre
+sudo apt install calibre           # Linux
+brew install --cask calibre        # macOS
+winget install calibre.calibre     # Windows
 ```
+
+> macOS ve Windows'ta Calibre kendini PATH'e eklemeyebilir. `ebook-convert`
+> bulunamıyorsa macOS'ta `/Applications/calibre.app/Contents/MacOS`,
+> Windows'ta `C:\Program Files\Calibre2` dizinini PATH'e ekle.
 
 Markdown istenmesinin sebebi başlıkların korunması — bölüm ayrımının tek
 güvenilir kaynağı onlar.
@@ -252,32 +275,35 @@ son cümlesini değil.
 `--roles all` seçildiğinde araya kimin konuştuğunu belirten kısa bir ayraç
 konur ("Kullanıcı:", "Asistan:"); tek rol okunurken ayraç konmaz.
 
-## Klavye kısayolu (GNOME)
+## Klavye kısayolu
 
 Asıl kullanım şekli bu: metni kopyala, tuşa bas, dinle.
 
-Pano okuma X11'de `xclip`/`xsel`, Wayland'de `wl-paste` ile yapılır; oturum
-tipine uygun olan kendiliğinden seçilir.
+Panoyu okuma aracı platforma göre seçilir: macOS'ta `pbpaste`, Windows'ta
+PowerShell'in `Get-Clipboard`'ı — ikisi de sistemle gelir. Linux'ta pencere
+sistemine bağlıdır ve kurmak gerekir:
 
 ```bash
-sudo apt install xclip      # X11 için
+sudo apt install xclip      # X11 için (Wayland'de: wl-clipboard)
 ```
 
 Üç kısayol yeterli. `duraklat` tek başına hem duraklatır hem sürdürür, o
 yüzden "devam et" için ayrı bir tuşa gerek yok:
 
-| Ad | Komut | Kısayol örneği |
-|----|-------|----------------|
-| `Pakize: panodakini oku` | `pakize speak --clipboard` | `Super+S` |
-| `Pakize: duraklat` | `pakize duraklat` | `Super+Space` |
-| `Pakize: durdur` | `pakize dur` | `Shift+Super+D` |
+| Ad | Komut | Linux/Windows | macOS |
+|----|-------|---------------|-------|
+| `Pakize: panodakini oku` | `pakize speak --clipboard` | `Super+S` | `⌥⌘S` |
+| `Pakize: duraklat` | `pakize duraklat` | `Super+Space` | `⌥⌘Space` |
+| `Pakize: durdur` | `pakize dur` | `Shift+Super+D` | `⇧⌥⌘D` |
 
-### Arayüzden
+### Linux (GNOME)
+
+#### Arayüzden
 
 **Ayarlar → Klavye → Klavye Kısayollarını Görüntüle ve Özelleştir → Özel
 Kısayollar → +** — her satır için bir kısayol ekle.
 
-### Terminalden
+#### Terminalden
 
 Aynı işi yapar; Ayarlar ekranı da bu gsettings anahtarlarına yazar.
 
@@ -309,7 +335,7 @@ gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
 Kaldırmak için her yol için `gsettings reset-recursively "$SEMA:$YOL"` çalıştır
 ve listeyi `"@as []"` yap.
 
-### Tam yol gerekir mi?
+#### Tam yol gerekir mi?
 
 Genelde gerekmez: GNOME kısayolları oturumun `PATH`'ini miras alır ve Ubuntu'da
 `~/.local/bin` orada bulunur. Kontrol et:
@@ -321,7 +347,7 @@ tr '\0' '\n' < /proc/$(pgrep -x gnome-shell | head -1)/environ | grep ^PATH=
 Çıktıda `~/.local/bin` yoksa komutlarda tam yol kullan:
 `/home/<kullanıcı>/.local/bin/pakize speak --clipboard`.
 
-### Tuş çakışması
+#### Tuş çakışması
 
 `Super+Space` bazı kurulumlarda klavye düzeni değiştirmeye bağlıdır. Boş
 olduğundan emin ol:
@@ -331,6 +357,68 @@ gsettings get org.gnome.desktop.wm.keybindings switch-input-source
 ```
 
 `@as []` dönerse boştur.
+
+### macOS
+
+Sistemle gelen yol Automator'dır; ek yazılım gerekmez. Üç komutun her biri için
+bir Hızlı İşlem oluşturulur, sonra tuş atanır.
+
+1. **Automator → Yeni Belge → Hızlı İşlem (Quick Action)**
+2. Üstte: *İş akışı şunu alır:* **girdi yok**, *şurada:* **herhangi bir uygulama**
+3. Soldan **Kabuk Betiği Çalıştır**'ı sürükle, içine yaz:
+
+```bash
+$HOME/.local/bin/pakize speak --clipboard
+```
+
+4. `Pakize: panodakini oku` adıyla kaydet; aynısını `pakize duraklat` ve
+   `pakize dur` için tekrarla.
+5. **Sistem Ayarları → Klavye → Klavye Kısayolları → Hizmetler → Genel** —
+   üç Hızlı İşlemin yanına tuşları yaz.
+
+> **Tam yol şart.** Automator, giriş kabuğunun `PATH`'ini miras almaz; sadece
+> `pakize` yazarsan "command not found" alırsın ve kısayol sessizce hiçbir şey
+> yapmaz. Doğru yolu `which pakize` ile öğren.
+
+Daha hafif bir yol istersen [`skhd`](https://github.com/koekeishiya/skhd) ile
+tek dosyada üç satır yeter:
+
+```
+alt + cmd - s : $HOME/.local/bin/pakize speak --clipboard
+alt + cmd - space : $HOME/.local/bin/pakize duraklat
+shift + alt + cmd - d : $HOME/.local/bin/pakize dur
+```
+
+### Windows
+
+Sistemle gelen yol kısayol dosyasıdır (`.lnk`); ek yazılım gerekmez.
+
+1. `Win+R` → `shell:programs` → açılan klasörde **sağ tık → Yeni → Kısayol**
+2. Konum olarak yaz (kendi kullanıcı adınla):
+
+```
+%USERPROFILE%\.local\bin\pakize.exe speak --clipboard
+```
+
+3. `Pakize: panodakini oku` adıyla kaydet.
+4. Kısayola **sağ tık → Özellikler → Kısayol tuşu** alanına tıkla ve tuş
+   bileşimine bas (`Ctrl+Alt+S` gibi).
+5. Aynısını `duraklat` ve `dur` için tekrarla.
+
+> Bu yöntemde her basışta kısa bir konsol penceresi yanıp söner. Rahatsız
+> ediyorsa **Çalıştır** alanını *Simge durumunda* yap ya da
+> [AutoHotkey](https://www.autohotkey.com/) kullan:
+
+```autohotkey
+#Requires AutoHotkey v2.0
+#s::Run('pakize.exe speak --clipboard', , 'Hide')
+#Space::Run('pakize.exe duraklat', , 'Hide')
++#d::Run('pakize.exe dur', , 'Hide')
+```
+
+> `Win` tuşlu bileşimlerin çoğu Windows'ta rezervedir (`Win+S` arama açar).
+> AutoHotkey bunları ezebilir, `.lnk` kısayolları ezemez — `.lnk` yolunda
+> `Ctrl+Alt+<harf>` seç.
 
 ### Bilinmesi gerekenler
 
@@ -360,19 +448,13 @@ Durduruldu. (2 seslendirme)
 kitap üretilirken başka bir terminalden `pakize speak -c` çalıştırmak
 çakışmaz.
 
-### Akıcı çalma
-
-Varsayılan olarak ses, **ilk parça hazır olur olmaz** çalmaya başlar; kalan
-parçalar arkadan üretilmeye devam eder. Uzun bir metinde ilk sese kadar
-beklediğin süre, metnin tamamının değil yalnızca ilk parçanın süresidir.
-
-Arşiv dosyası yine eksiksiz yazılır. Sesin baştan sona tek parça çalmasını
-istersen `--no-stream` kullan veya config'te `stream = false` yaz.
-
 ## Yapılandırma
 
-Ayarlar `~/.config/pakize/config.toml` dosyasından okunur; CLI bayrakları bu
-dosyayı ezer. Dosya olmadan da çalışır.
+Ayarlar Linux ve macOS'ta `~/.config/pakize/config.toml`, Windows'ta
+`%APPDATA%\pakize\config.toml` dosyasından okunur; `XDG_CONFIG_HOME` tanımlıysa
+her üçünde de o kazanır. CLI bayrakları dosyayı ezer, dosya olmadan da çalışır.
+
+Etkin yolu görmek için: `pakize config`.
 
 Açıklamalı bir başlangıç dosyası oluşturmak için:
 
@@ -390,6 +472,7 @@ volume = 1.0
 pitch_hz = 0
 max_chunk_chars = 2500           # bir TTS isteğine sığdırılacak azami karakter
 output_dir = "/tmp/pakize"       # çıktı yolu verilmediğinde seslerin biriktiği yer
+                                 # (Windows'ta %TEMP%\pakize olarak üretilir)
 stream = true                    # ilk parça hazır olunca çalmaya başla
 normalize_decimals = true        # 1.15 → 1,15 (Türkçe ondalık okunuşu)
 
@@ -459,6 +542,11 @@ piper_model = "/yol/tr_TR-dfki-medium.onnx"
 piper_binary = "/yol/piper"        # boşsa PATH'te aranır
 ```
 
+> Windows'ta yolları TOML'da ters bölüyle yazacaksan **çiftle**
+> (`"C:\\sesler\\tr_TR-dfki-medium.onnx"`) ya da düz bölü kullan
+> (`"C:/sesler/tr_TR-dfki-medium.onnx"`) — tek ters bölü TOML'da kaçış
+> başlatır. `pakize config --init` ile üretilen dosya bunu kendisi halleder.
+
 Yalnızca Piper kullanmak için `engine = "piper"` yaz ya da `--engine piper` ver.
 
 Piper WAV üretir; hedef dosya `.mp3` ise birleştirme sırasında dönüştürülür.
@@ -478,6 +566,15 @@ metne bakarak ayırmanın yolu yok. Sürüm numaraları senin için daha önemli
 `normalize_decimals = false` yaz.
 
 `1.2.3`, `192.168.1.1` ve `09.08.2026` gibi çok noktalı ifadelere dokunulmaz.
+
+## Akıcı çalma
+
+Varsayılan olarak ses, **ilk parça hazır olur olmaz** çalmaya başlar; kalan
+parçalar arkadan üretilmeye devam eder. Uzun bir metinde ilk sese kadar
+beklediğin süre, metnin tamamının değil yalnızca ilk parçanın süresidir.
+
+Arşiv dosyası yine eksiksiz yazılır. Sesin baştan sona tek parça çalmasını
+istersen `--no-stream` kullan veya config'te `stream = false` yaz.
 
 ## Hız hakkında
 
@@ -499,6 +596,24 @@ metin
 Tüm arayüzler (CLI, pano kısayolu, transkript okuyucu, web paneli)
 `pipeline.synthesize` fonksiyonunu çağırır; iş mantığı başka hiçbir yerde
 tekrarlanmaz.
+
+### Platform farkları nerede yaşıyor?
+
+Bu boru hattının tamamı üç platformda aynı kodu çalıştırır. Sistemin kendisine
+sorulması gereken her şey `platforms.py` içinde toplanmıştır — ayarların nereye
+yazılacağı, geçici dizinin nerede olduğu, eksik bir aracın nasıl kurulacağı.
+Başka hiçbir modül `sys.platform`'a bakmaz.
+
+İki yerde daha davranış farkı var, ikisi de sarmalanmış durumda:
+
+- **Süreç denetimi** (`runtime.py`) — çalan `ffplay`'i bulmak, duraklatmak ve
+  kesmek için `psutil` kullanılır. Duraklatma POSIX'te `SIGSTOP`, Windows'ta
+  `NtSuspendProcess`'tir; `psutil` ikisini tek çağrının arkasına saklar.
+  `pakize dur` her platformda **önce sesi susturur, sonra süreci sonlandırır**:
+  Windows'ta süreç sonlandırma sinyal işleyicisini çalıştırmaz, dolayısıyla ana
+  süreç kendi `ffplay`'ini kesemeden ölür ve ses öksüz kalıp çalmayı sürdürürdü.
+- **Pano** (`sources/clipboard.py`) — sistemin kendi aracı her zaman önce
+  denenir, sonra pencere sistemine uyan araç.
 
 ## Testler
 
