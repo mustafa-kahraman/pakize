@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "Metni ses dosyasına çeviren, kod bloklarını okumayan yerel TTS aracı"
 readme = "README.md"
 authors = [
-    { name = "Mustafa K...", email = "mustafa@3hz.net" }
+    { name = "Mustafa Kahraman" }
 ]
 license = "MIT"
 license-files = ["LICENSE"]
