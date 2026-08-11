@@ -1,20 +1,31 @@
-"""Çalmakta olan seslendirmenin süreç kaydı.
+"""Çalmakta olan seslendirmenin süreç kaydı ve denetimi.
 
-`pakize dur`, çalmayı başlatan sürece ulaşabilmek için bu kaydı okur. Kayıt
-`XDG_RUNTIME_DIR` altında tutulur; oturum kapanınca işletim sistemi temizler.
+`pakize dur` ve `pakize duraklat`, çalmayı başlatan sürece ulaşabilmek için bu
+kaydı okur. Kayıt geçici dizin altında tutulur; oturum kapanınca işletim
+sistemi temizler.
 
 Kayıt yalnızca bir ipucudur: süreç kimlikleri yeniden kullanılabildiği için
 okurken sürecin gerçekten Pakize olduğu doğrulanır.
+
+Süreç ağacına doğrudan işletim sistemi arayüzleriyle değil `psutil` üzerinden
+bakarız: Linux'ta `/proc`, macOS'ta `sysctl`, Windows'ta `NtQuerySystemInfo`
+gerekir ve duraklatmanın Windows karşılığı sinyal değil `NtSuspendProcess`'tir.
+Tek kod yolu ancak bu soyutlamayla mümkün.
 """
 
 from __future__ import annotations
 
 import os
-import signal
-import tempfile
 from pathlib import Path
 
+import psutil
+
+from .platforms import temp_root
+
 STATE_NAME = "pakize-playing"
+
+PLAYER_COMM = "ffplay"
+"""Çalmayı yürüten sürecin adı (Windows'ta `ffplay.exe` olarak görünür)."""
 
 
 def state_dir() -> Path:
@@ -25,7 +36,7 @@ def state_dir() -> Path:
     hâle gelmesine yol açıyordu.
     """
     base = os.environ.get("XDG_RUNTIME_DIR")
-    root = Path(base) if base else Path(tempfile.gettempdir())
+    root = Path(base) if base else temp_root()
     return root / STATE_NAME
 
 
@@ -69,111 +80,113 @@ def running_pid() -> int | None:
     return pids[0] if pids else None
 
 
-PLAYER_COMM = "ffplay"
-"""Çalmayı yürüten sürecin çekirdekteki adı."""
-
-_STOPPED_STATE = "T"
-"""`/proc/<pid>/stat` içinde duraklatılmış süreci gösteren durum harfi."""
-
-
 def pause(pid: int) -> bool:
     """Sürecin çalma alt süreçlerini duraklatır.
 
     Duraklatılacak bir şey yoksa False döner.
     """
-    return _signal_players(pid, signal.SIGSTOP)
+    return _apply(pid, "suspend")
 
 
 def resume(pid: int) -> bool:
     """Duraklatılmış çalmayı sürdürür."""
-    return _signal_players(pid, signal.SIGCONT)
+    return _apply(pid, "resume")
 
 
 def is_paused(pid: int) -> bool:
     """Çalma şu an duraklatılmış mı?"""
     players = _players(pid)
-    return bool(players) and all(state == _STOPPED_STATE for _, state in players)
+    return bool(players) and all(_is_suspended(player) for player in players)
 
 
 def stop(pid: int) -> bool:
-    """Sürece nazik sonlandırma sinyali gönderir.
+    """Çalmayı keser ve süreci sonlandırır.
+
+    Önce çalan sesler susturulur, sonra ana süreç sonlandırılır. Sıra kasıtlı:
+    Windows'ta süreç sonlandırma sinyal işleyicisini çalıştırmaz, dolayısıyla
+    ana süreç kendi ffplay'ini kesemeden ölür ve ses öksüz kalıp çalmayı
+    sürdürürdü.
 
     Süreç zaten ölmüşse False döner; çağıran bunu hata saymamalıdır.
     """
+    _terminate_players(pid)
+
     try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
+        psutil.Process(pid).terminate()
+    except psutil.NoSuchProcess:
         clear(pid)
         return False
-    except PermissionError:
+    except (psutil.Error, OSError):
         return False
     return True
 
 
-def _signal_players(pid: int, sig: int) -> bool:
-    """Çalma alt süreçlerinin tümüne sinyal gönderir; hiçbiri yoksa False."""
-    gonderildi = False
-    for player_pid, _ in _players(pid):
-        try:
-            os.kill(player_pid, sig)
-        except (ProcessLookupError, PermissionError):
-            continue
-        gonderildi = True
-    return gonderildi
+def _apply(pid: int, eylem: str) -> bool:
+    """Çalma alt süreçlerinin tümüne bir eylemi uygular; hiçbiri yoksa False."""
+    uygulandi = False
+    for player in _players(pid):
+        # Kısa devre yapılmamalı: biri başarısız olsa da diğerlerine uygulanır.
+        if _try(player, eylem):
+            uygulandi = True
+    return uygulandi
 
 
-def _players(pid: int) -> list[tuple[int, str]]:
-    """Sürecin çalma alt süreçlerini (numara, durum) çiftleri olarak döner.
+def _terminate_players(pid: int) -> None:
+    """Çalan sesleri keser.
+
+    Sıra önemli: duraklatılmış bir süreç sonlandırma isteğini işleyemez, bu
+    yüzden önce devam ettirilir. Ters sırada ffplay isteği yutup çalmayı
+    sürdürüyor.
+    """
+    for player in _players(pid):
+        _try(player, "resume")
+        _try(player, "terminate")
+
+
+def _try(process: psutil.Process, eylem: str) -> bool:
+    """Süreç üzerinde bir eylemi dener; uygulanamadıysa False döner.
+
+    Süreç iki okuma arasında ölmüş olabilir; bu olağan bir yarış, hata değil.
+    Devam ettirme başarısız olsa bile sonlandırmanın denenmesi gerektiği için
+    hata yutma tek tek eylemlerin çevresindedir.
+    """
+    try:
+        getattr(process, eylem)()
+    except (psutil.Error, OSError):
+        return False
+    return True
+
+
+def _players(pid: int) -> list[psutil.Process]:
+    """Sürecin çalma alt süreçlerini döner.
 
     Çalan süreci ayrı bir dosyada tutmak yerine işletim sisteminden okuruz:
     tek doğruluk kaynağı çekirdek olur, kayıt ile gerçek arasında kayma olmaz.
     """
     try:
-        adaylar = [
-            int(entry.name) for entry in Path("/proc").iterdir() if entry.name.isdigit()
-        ]
-    except OSError:
+        children = psutil.Process(pid).children(recursive=True)
+    except (psutil.Error, OSError):
         return []
-
-    bulunan: list[tuple[int, str]] = []
-    for aday in adaylar:
-        okunan = _read_stat(aday)
-        if okunan is None:
-            continue
-        comm, state, ppid = okunan
-        if ppid == pid and comm == PLAYER_COMM:
-            bulunan.append((aday, state))
-    return bulunan
+    return [child for child in children if _is_player(child)]
 
 
-def _read_stat(pid: int) -> tuple[str, str, int] | None:
-    """`/proc/<pid>/stat` dosyasından (komut adı, durum, ebeveyn) okur."""
-    try:
-        icerik = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    return _parse_stat_line(icerik)
+def _is_player(process: psutil.Process) -> bool:
+    """Süreç, çalmayı yürüten ffplay mi?
 
-
-def _parse_stat_line(satir: str) -> tuple[str, str, int] | None:
-    """`stat` satırını (komut adı, durum, ebeveyn) üçlüsüne ayrıştırır.
-
-    Komut adı parantez içindedir ve boşluk içerebilir; bu yüzden sondaki
-    parantezden bölmek, alanlara boşlukla ayırmaktan güvenlidir.
+    Uzantı ayıklanır: aynı süreç Windows'ta `ffplay.exe` adıyla görünür.
     """
-    bas, ayrac, kalan = satir.rpartition(")")
-    if not ayrac or "(" not in bas:
-        return None
-
-    comm = bas.partition("(")[2]
-    alanlar = kalan.split()
-    if len(alanlar) < 2:
-        return None
-
     try:
-        return comm, alanlar[0], int(alanlar[1])
-    except ValueError:
-        return None
+        return Path(process.name()).stem.lower() == PLAYER_COMM
+    except (psutil.Error, OSError):
+        return False
+
+
+def _is_suspended(process: psutil.Process) -> bool:
+    """Süreç duraklatılmış durumda mı?"""
+    try:
+        return process.status() == psutil.STATUS_STOPPED
+    except (psutil.Error, OSError):
+        return False
 
 
 def _is_pakize(pid: int) -> bool:
@@ -182,8 +195,8 @@ def _is_pakize(pid: int) -> bool:
     Komut satırına bakmak, kayıt bayatladıktan sonra aynı numarayı almış
     alakasız bir sürecin öldürülmesini engeller.
     """
-    cmdline = Path(f"/proc/{pid}/cmdline")
     try:
-        return b"pakize" in cmdline.read_bytes()
-    except OSError:
+        cmdline = psutil.Process(pid).cmdline()
+    except (psutil.Error, OSError):
         return False
+    return any("pakize" in arg.lower() for arg in cmdline)

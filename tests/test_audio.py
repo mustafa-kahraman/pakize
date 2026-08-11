@@ -33,18 +33,27 @@ def temiz_kayit():
     """Her testten sonra modül düzeyindeki çalan süreç kaydını temizler."""
     yield
     audio._player = None
+    audio._stopped = False
 
 
 @pytest.fixture(autouse=True)
-def sinyal_yakala(monkeypatch) -> list[tuple[int, int]]:
-    """`os.kill`'i yamalar.
+def devam_ettirilen(monkeypatch) -> list[int]:
+    """`psutil.Process`'i yamalar.
 
-    Sahte süreç numarasına gerçek sinyal göndermek başka bir süreci
-    vurabilirdi; testler asla gerçek sinyal göndermemeli.
+    Sahte süreç numarasına gerçekten dokunmak başka bir süreci vurabilirdi;
+    testler asla canlı bir sürece devam/sonlandırma uygulamamalı.
     """
-    gonderilen: list[tuple[int, int]] = []
-    monkeypatch.setattr(audio.os, "kill", lambda pid, sig: gonderilen.append((pid, sig)))
-    return gonderilen
+    kayit: list[int] = []
+
+    class SahteIslem:
+        def __init__(self, pid: int):
+            self.pid = pid
+
+        def resume(self) -> None:
+            kayit.append(self.pid)
+
+    monkeypatch.setattr(audio.psutil, "Process", SahteIslem)
+    return kayit
 
 
 @pytest.fixture
@@ -93,14 +102,50 @@ def test_gercek_hata_yukselir(surec, tmp_path):
         audio.play(tmp_path / "ses.mp3")
 
 
-def test_stop_playback_calan_sureci_sonlandirir(sinyal_yakala):
+class DurdurulanSurec(SahteSurec):
+    """Çalma sürerken `pakize dur` devreye giren ffplay.
+
+    Windows'ta sonlandırılan süreç, kodek hatasıyla aynı çıkış kodunu (1)
+    döndürür — bu yüzden sahte de öyle davranır.
+    """
+
+    def communicate(self):
+        audio.stop_playback()
+        self.returncode = 1
+        return (b"", b"")
+
+
+def test_kasitli_durdurma_hata_sayilmaz(monkeypatch, tmp_path):
+    """Durdurma niyeti kaydedilir; çıkış kodundan okunamaz."""
+    monkeypatch.setattr(audio, "_require_binary", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        audio.subprocess, "Popen", lambda command, **kwargs: DurdurulanSurec()
+    )
+
+    audio.play(tmp_path / "ses.mp3")
+
+
+def test_durdurma_kaydi_sonraki_calmaya_sizmaz(surec, monkeypatch, tmp_path):
+    """Bir kez durdurmak, sonraki çalmanın gerçek hatasını gizlememeli."""
+    monkeypatch.setattr(audio, "_require_binary", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        audio.subprocess, "Popen", lambda command, **kwargs: DurdurulanSurec()
+    )
+    audio.play(tmp_path / "ses.mp3")
+
+    surec(returncode=1, stderr=b"kodek yok")
+    with pytest.raises(AudioError, match="kodek yok"):
+        audio.play(tmp_path / "ses.mp3")
+
+
+def test_stop_playback_calan_sureci_sonlandirir(devam_ettirilen):
     sahte = SahteSurec()
     audio._set_player(sahte)
 
     assert audio.stop_playback() is True
     assert sahte.terminate_edildi is True
-    # Duraklatılmış olma ihtimaline karşı, sonlandırmadan önce devam sinyali.
-    assert sinyal_yakala == [(sahte.pid, signal.SIGCONT)]
+    # Duraklatılmış olma ihtimaline karşı, sonlandırmadan önce devam ettirilir.
+    assert devam_ettirilen == [sahte.pid]
 
 
 def test_ayni_bicimdeki_parcalar_yeniden_kodlanmaz(tmp_path, monkeypatch):
