@@ -13,10 +13,11 @@ tables, links and formatting marks according to a policy you control.
 - **Control** — read, pause and stop from a keyboard shortcut
 - **Platforms** — Linux, macOS and Windows
 
-> **Built for Turkish.** The default voice, the decimal-separator handling and
-> the CLI verbs are Turkish. Everything works for other languages too — pick a
-> different voice with `--voice` — but a few defaults will look odd until you
-> change them. See [Command names](#command-names).
+> **Built for Turkish.** The default voice and the decimal-separator handling
+> are Turkish, and so is the console output. Everything works for other
+> languages too — pick a different voice with `--voice` — but a few defaults
+> will look odd until you change them. Where a message matters, this document
+> shows it verbatim with a translation next to it.
 
 > **Unofficial services.** Pakize gets audio from Microsoft's Edge "Read Aloud"
 > endpoint via `edge-tts`, and translation from Google's free translation
@@ -26,24 +27,6 @@ tables, links and formatting marks according to a policy you control.
 > for personal use; evaluating it for commercial or heavy use is on you. For a
 > fully local alternative that needs no network, see
 > [Offline fallback: Piper](#offline-fallback-piper).
-
-## Command names
-
-Pakize's CLI verbs are Turkish. They are the actual command names — don't
-translate them when typing:
-
-| Command | Meaning |
-|---------|---------|
-| `pakize speak` | speak the given text |
-| `pakize kitap` | *book* — narrate a long text chapter by chapter |
-| `pakize duraklat` | *pause* — pause playback; resume if already paused |
-| `pakize dur` | *stop* — stop playback |
-| `pakize son` | *last* — replay the most recently produced audio |
-| `pakize voices` | list available voices |
-| `pakize config` | show effective settings |
-
-Console output is Turkish as well. The examples below show it verbatim, with a
-translation in a comment where it matters.
 
 ## Installation
 
@@ -104,7 +87,7 @@ winget install Gyan.FFmpeg
 the file:
 
 ```bash
-uv tool install pakize-0.2.0-py3-none-any.whl
+uv tool install pakize-0.3.0-py3-none-any.whl
 ```
 
 **If you are installing from the repository** — in the project directory:
@@ -162,7 +145,7 @@ uv tool install --editable . --force
 If you installed from a built package, run the same command with the new `.whl`:
 
 ```bash
-uv tool install pakize-0.2.0-py3-none-any.whl --force
+uv tool install pakize-0.3.0-py3-none-any.whl --force
 ```
 
 ### Optional tools
@@ -246,16 +229,16 @@ permanent archive.
 ### Other commands
 
 ```bash
-pakize kitap book.epub     # narrate a book chapter by chapter
-pakize duraklat            # pause playback; resume if paused (same command)
-pakize dur                 # stop the playback in progress
-pakize son                 # replay the most recently produced audio
-pakize son --list          # list recent recordings with timestamps
-pakize son --list -n 30    # show more of them
-pakize voices              # list Turkish voices
-pakize voices -l all       # list every language
-pakize config              # show effective settings
-pakize config --init       # create an annotated config file
+pakize book book.epub         # narrate a book chapter by chapter
+pakize pause                  # pause playback; resume if paused (same command)
+pakize stop                   # stop the playback in progress
+pakize replay                 # replay the most recently produced audio
+pakize replay --list          # list recent recordings with timestamps
+pakize replay --list -n 30    # show more of them
+pakize voices                 # list Turkish voices
+pakize voices -l all          # list every language
+pakize config                 # show effective settings
+pakize config --init          # create an annotated config file
 ```
 
 ## Translation
@@ -264,7 +247,7 @@ Translates the text before speaking it. To listen to an English book in Turkish:
 
 ```bash
 pakize speak article.md --translate tr    # or -T tr
-pakize kitap book.epub --translate tr
+pakize book book.epub --translate tr
 pakize speak -t -T en                     # hear the last answer in English
 ```
 
@@ -315,10 +298,10 @@ audio; instead of one file, each chapter is written separately with a playlist
 alongside.
 
 ```bash
-pakize kitap book.epub                   # chapters under book/ in the temp directory
-pakize kitap book.pdf -o ~/Music/book    # into another directory
-pakize kitap book.md --dry-run           # see the chapter list, produce no audio
-pakize kitap book.epub -l 1              # only '#' headings count as chapters
+pakize book book.epub                   # chapters under book/ in the temp directory
+pakize book book.pdf -o ~/Music/book    # into another directory
+pakize book book.md --dry-run           # see the chapter list, produce no audio
+pakize book book.epub -l 1              # only '#' headings count as chapters
 ```
 
 Output:
@@ -424,14 +407,14 @@ window system and has to be installed:
 sudo apt install xclip      # for X11 (on Wayland: wl-clipboard)
 ```
 
-Three shortcuts are enough. `duraklat` both pauses and resumes on its own, so no
+Three shortcuts are enough. `pause` both pauses and resumes on its own, so no
 separate "resume" key is needed:
 
 | Name | Command | Linux/Windows | macOS |
 |------|---------|---------------|-------|
 | `Pakize: read clipboard` | `pakize speak --clipboard` | `Super+S` | `⌥⌘S` |
-| `Pakize: pause` | `pakize duraklat` | `Super+Space` | `⌥⌘Space` |
-| `Pakize: stop` | `pakize dur` | `Shift+Super+D` | `⇧⌥⌘D` |
+| `Pakize: pause` | `pakize pause` | `Super+Space` | `⌥⌘Space` |
+| `Pakize: stop` | `pakize stop` | `Shift+Super+D` | `⇧⌥⌘D` |
 
 ### Linux (GNOME)
 
@@ -458,8 +441,8 @@ add() {  # add <key> <command> <binding> <name>
 
 PATHS=$(
   add pakize-read  "pakize speak --clipboard" '<Super>s'        'Pakize: read clipboard'
-  add pakize-pause "pakize duraklat"          '<Super>space'    'Pakize: pause'
-  add pakize-stop  "pakize dur"               '<Shift><Super>d' 'Pakize: stop'
+  add pakize-pause "pakize pause"             '<Super>space'    'Pakize: pause'
+  add pakize-stop  "pakize stop"              '<Shift><Super>d' 'Pakize: stop'
 )
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
   "[$(echo $PATHS | tr ' ' ',')]"
@@ -509,8 +492,8 @@ Action per command, then assign a key.
 $HOME/.local/bin/pakize speak --clipboard
 ```
 
-4. Save it as `Pakize: read clipboard`; repeat for `pakize duraklat` and
-   `pakize dur`.
+4. Save it as `Pakize: read clipboard`; repeat for `pakize pause` and
+   `pakize stop`.
 5. **System Settings → Keyboard → Keyboard Shortcuts → Services → General** —
    assign keys next to the three Quick Actions.
 
@@ -523,8 +506,8 @@ If you want something lighter, three lines in a single
 
 ```
 alt + cmd - s : $HOME/.local/bin/pakize speak --clipboard
-alt + cmd - space : $HOME/.local/bin/pakize duraklat
-shift + alt + cmd - d : $HOME/.local/bin/pakize dur
+alt + cmd - space : $HOME/.local/bin/pakize pause
+shift + alt + cmd - d : $HOME/.local/bin/pakize stop
 ```
 
 ### Windows
@@ -542,7 +525,7 @@ The built-in route is a shortcut file (`.lnk`); no extra software needed.
 3. Save it as `Pakize: read clipboard`.
 4. **Right-click the shortcut → Properties → Shortcut key**, click the field and
    press the key combination (e.g. `Ctrl+Alt+S`).
-5. Repeat for `duraklat` and `dur`.
+5. Repeat for `pause` and `stop`.
 
 > With this method a console window flashes on every press. If that bothers you,
 > set **Run** to *Minimized*, or use
@@ -551,8 +534,8 @@ The built-in route is a shortcut file (`.lnk`); no extra software needed.
 ```autohotkey
 #Requires AutoHotkey v2.0
 #s::Run('pakize.exe speak --clipboard', , 'Hide')
-#Space::Run('pakize.exe duraklat', , 'Hide')
-+#d::Run('pakize.exe dur', , 'Hide')
+#Space::Run('pakize.exe pause', , 'Hide')
++#d::Run('pakize.exe stop', , 'Hide')
 ```
 
 > Most `Win` key combinations are reserved on Windows (`Win+S` opens search).
@@ -566,26 +549,26 @@ the error message**. If the clipboard is empty or there is no network, nothing
 happens silently. If you hear no sound, run `pakize speak -c` in a terminal to
 see why.
 
-`duraklat` and `dur` only manage playback that Pakize started; they never touch
-other `ffplay` processes on the system. `dur` works while paused. When you run
+`pause` and `stop` only manage playback that Pakize started; they never touch
+other `ffplay` processes on the system. `stop` works while paused. When you run
 it from a terminal, Ctrl+C stops it too.
 
 `--transcript` is a poor fit for a shortcut: it picks the session by **working
 directory**, while a shortcut runs in your home directory. If you want to bind
 it, add `--session /path/session.jsonl` to the command.
 
-These commands also manage playback you started with `pakize son`.
+These commands also manage playback you started with `pakize replay`.
 
 If several narrations are playing at once (you started them from two different
-terminals) both are managed — `dur` stops all of them, `duraklat` pauses all of
+terminals) both are managed — `stop` stops all of them, `pause` pauses all of
 them:
 
 ```
-$ pakize dur
+$ pakize stop
 Durduruldu. (2 seslendirme)      ← "Stopped. (2 narrations)"
 ```
 
-`pakize kitap` plays no audio, it only produces files; so running
+`pakize book` plays no audio, it only produces files; so running
 `pakize speak -c` from another terminal while a book is being produced in the
 background does not conflict.
 
@@ -758,7 +741,7 @@ Two more places differ in behaviour, both encapsulated:
 
 - **Process control** (`runtime.py`) — `psutil` is used to find, pause and stop
   the playing `ffplay`. Pausing is `SIGSTOP` on POSIX and `NtSuspendProcess` on
-  Windows; `psutil` hides both behind one call. On every platform `pakize dur`
+  Windows; `psutil` hides both behind one call. On every platform `pakize stop`
   **silences the audio first and terminates the process second**: on Windows,
   terminating a process does not run its signal handler, so the main process
   would die before it could stop its own `ffplay` and the audio would keep

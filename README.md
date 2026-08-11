@@ -80,7 +80,7 @@ winget install Gyan.FFmpeg
 **Hazır paket (`.whl` dosyası) aldıysan** — dosyanın bulunduğu dizinde:
 
 ```bash
-uv tool install pakize-0.2.0-py3-none-any.whl
+uv tool install pakize-0.3.0-py3-none-any.whl
 ```
 
 **Depodan kuruyorsan** — proje dizininde:
@@ -139,7 +139,7 @@ uv tool install --editable . --force
 Hazır paketten kurduysan yeni `.whl` dosyasıyla aynı komutu çalıştır:
 
 ```bash
-uv tool install pakize-0.2.0-py3-none-any.whl --force
+uv tool install pakize-0.3.0-py3-none-any.whl --force
 ```
 
 ### İsteğe bağlı araçlar
@@ -222,16 +222,16 @@ ayarını değiştir.
 ### Diğer komutlar
 
 ```bash
-pakize kitap kitap.epub    # bir kitabı bölüm bölüm seslendir
-pakize duraklat            # çalmayı duraklat; duraklatılmışsa sürdür (aynı komut)
-pakize dur                 # çalmakta olan seslendirmeyi durdur
-pakize son                 # en son üretilen sesi yeniden çal
-pakize son --list          # son üretilen sesleri tarihiyle listele
-pakize son --list -n 30    # daha fazlasını göster
-pakize voices              # Türkçe sesleri listele
-pakize voices -l all       # tüm dilleri listele
-pakize config              # etkin ayarları göster
-pakize config --init       # açıklamalı config dosyası oluştur
+pakize book kitap.epub        # bir kitabı bölüm bölüm seslendir
+pakize pause                  # çalmayı duraklat; duraklatılmışsa sürdür (aynı komut)
+pakize stop                   # çalmakta olan seslendirmeyi durdur
+pakize replay                 # en son üretilen sesi yeniden çal
+pakize replay --list          # son üretilen sesleri tarihiyle listele
+pakize replay --list -n 30    # daha fazlasını göster
+pakize voices                 # Türkçe sesleri listele
+pakize voices -l all          # tüm dilleri listele
+pakize config                 # etkin ayarları göster
+pakize config --init          # açıklamalı config dosyası oluştur
 ```
 
 ## Çeviri
@@ -240,7 +240,7 @@ Metni seslendirmeden önce çevirir. İngilizce bir kitabı Türkçe dinlemek i�
 
 ```bash
 pakize speak makale.md --translate tr    # veya -T tr
-pakize kitap kitap.epub --translate tr
+pakize book kitap.epub --translate tr
 pakize speak -t -T en                    # son cevabı İngilizce dinle
 ```
 
@@ -289,10 +289,10 @@ Uzun bir metni bölüm bölüm sese çevirir. Bir kitap 8-10 saatlik ses demek;
 tek dosya yerine her bölüm ayrı yazılır, yanına oynatma listesi bırakılır.
 
 ```bash
-pakize kitap kitap.epub                  # bölümler geçici dizindeki kitap/ altına
-pakize kitap kitap.pdf -o ~/Müzik/kitap  # başka bir dizine
-pakize kitap kitap.md --dry-run          # bölüm listesini gör, ses üretme
-pakize kitap kitap.epub -l 1             # yalnızca '#' başlıkları bölüm sayılsın
+pakize book kitap.epub                  # bölümler geçici dizindeki kitap/ altına
+pakize book kitap.pdf -o ~/Müzik/kitap  # başka bir dizine
+pakize book kitap.md --dry-run          # bölüm listesini gör, ses üretme
+pakize book kitap.epub -l 1             # yalnızca '#' başlıkları bölüm sayılsın
 ```
 
 Çıktı:
@@ -395,14 +395,14 @@ sistemine bağlıdır ve kurmak gerekir:
 sudo apt install xclip      # X11 için (Wayland'de: wl-clipboard)
 ```
 
-Üç kısayol yeterli. `duraklat` tek başına hem duraklatır hem sürdürür, o
+Üç kısayol yeterli. `pause` tek başına hem duraklatır hem sürdürür, o
 yüzden "devam et" için ayrı bir tuşa gerek yok:
 
 | Ad | Komut | Linux/Windows | macOS |
 |----|-------|---------------|-------|
 | `Pakize: panodakini oku` | `pakize speak --clipboard` | `Super+S` | `⌥⌘S` |
-| `Pakize: duraklat` | `pakize duraklat` | `Super+Space` | `⌥⌘Space` |
-| `Pakize: durdur` | `pakize dur` | `Shift+Super+D` | `⇧⌥⌘D` |
+| `Pakize: duraklat` | `pakize pause` | `Super+Space` | `⌥⌘Space` |
+| `Pakize: durdur` | `pakize stop` | `Shift+Super+D` | `⇧⌥⌘D` |
 
 ### Linux (GNOME)
 
@@ -428,9 +428,9 @@ kur() {  # kur <anahtar> <komut> <tuş> <ad>
 }
 
 YOLLAR=$(
-  kur pakize-oku      "pakize speak --clipboard" '<Super>s'        'Pakize: panodakini oku'
-  kur pakize-duraklat "pakize duraklat"          '<Super>space'    'Pakize: duraklat'
-  kur pakize-dur      "pakize dur"               '<Shift><Super>d' 'Pakize: durdur'
+  kur pakize-oku   "pakize speak --clipboard" '<Super>s'        'Pakize: panodakini oku'
+  kur pakize-pause "pakize pause"             '<Super>space'    'Pakize: duraklat'
+  kur pakize-stop  "pakize stop"              '<Shift><Super>d' 'Pakize: durdur'
 )
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
   "[$(echo $YOLLAR | tr ' ' ',')]"
@@ -479,8 +479,8 @@ bir Hızlı İşlem oluşturulur, sonra tuş atanır.
 $HOME/.local/bin/pakize speak --clipboard
 ```
 
-4. `Pakize: panodakini oku` adıyla kaydet; aynısını `pakize duraklat` ve
-   `pakize dur` için tekrarla.
+4. `Pakize: panodakini oku` adıyla kaydet; aynısını `pakize pause` ve
+   `pakize stop` için tekrarla.
 5. **Sistem Ayarları → Klavye → Klavye Kısayolları → Hizmetler → Genel** —
    üç Hızlı İşlemin yanına tuşları yaz.
 
@@ -493,8 +493,8 @@ tek dosyada üç satır yeter:
 
 ```
 alt + cmd - s : $HOME/.local/bin/pakize speak --clipboard
-alt + cmd - space : $HOME/.local/bin/pakize duraklat
-shift + alt + cmd - d : $HOME/.local/bin/pakize dur
+alt + cmd - space : $HOME/.local/bin/pakize pause
+shift + alt + cmd - d : $HOME/.local/bin/pakize stop
 ```
 
 ### Windows
@@ -511,7 +511,7 @@ Sistemle gelen yol kısayol dosyasıdır (`.lnk`); ek yazılım gerekmez.
 3. `Pakize: panodakini oku` adıyla kaydet.
 4. Kısayola **sağ tık → Özellikler → Kısayol tuşu** alanına tıkla ve tuş
    bileşimine bas (`Ctrl+Alt+S` gibi).
-5. Aynısını `duraklat` ve `dur` için tekrarla.
+5. Aynısını `pause` ve `stop` için tekrarla.
 
 > Bu yöntemde her basışta kısa bir konsol penceresi yanıp söner. Rahatsız
 > ediyorsa **Çalıştır** alanını *Simge durumunda* yap ya da
@@ -520,8 +520,8 @@ Sistemle gelen yol kısayol dosyasıdır (`.lnk`); ek yazılım gerekmez.
 ```autohotkey
 #Requires AutoHotkey v2.0
 #s::Run('pakize.exe speak --clipboard', , 'Hide')
-#Space::Run('pakize.exe duraklat', , 'Hide')
-+#d::Run('pakize.exe dur', , 'Hide')
+#Space::Run('pakize.exe pause', , 'Hide')
++#d::Run('pakize.exe stop', , 'Hide')
 ```
 
 > `Win` tuşlu bileşimlerin çoğu Windows'ta rezervedir (`Win+S` arama açar).
@@ -534,25 +534,25 @@ Kısayoldan tetiklediğinde ortada terminal olmaz; **hata mesajını göremezsin
 Pano boşsa ya da ağ yoksa sessizce hiçbir şey olmaz. Ses gelmezse terminalde
 `pakize speak -c` yazıp sebebi gör.
 
-`duraklat` ve `dur` yalnızca Pakize'nin başlattığı çalmayı yönetir; sistemdeki
-başka `ffplay` süreçlerine dokunmaz. Duraklatılmışken `dur` çalışır. Terminalden
+`pause` ve `stop` yalnızca Pakize'nin başlattığı çalmayı yönetir; sistemdeki
+başka `ffplay` süreçlerine dokunmaz. Duraklatılmışken `stop` çalışır. Terminalden
 çalıştırdığında Ctrl+C de durdurur.
 
 `--transcript` kısayola pek uygun değil: oturumu **çalışma dizinine** göre
 seçer, kısayol ise ev dizininde çalışır. Bağlamak istersen komuta
 `--session /yol/oturum.jsonl` ekle.
 
-Bu komutlar `pakize son` ile başlattığın çalmayı da yönetir.
+Bu komutlar `pakize replay` ile başlattığın çalmayı da yönetir.
 
 Aynı anda birden çok seslendirme çalıyorsa (iki ayrı terminalden başlattıysan)
-ikisi de yönetilir — `dur` hepsini durdurur, `duraklat` hepsini duraklatır:
+ikisi de yönetilir — `stop` hepsini durdurur, `pause` hepsini duraklatır:
 
 ```
-$ pakize dur
+$ pakize stop
 Durduruldu. (2 seslendirme)
 ```
 
-`pakize kitap` ses çalmaz, yalnızca dosya üretir; bu yüzden arka planda bir
+`pakize book` ses çalmaz, yalnızca dosya üretir; bu yüzden arka planda bir
 kitap üretilirken başka bir terminalden `pakize speak -c` çalıştırmak
 çakışmaz.
 
@@ -717,7 +717,7 @@ Başka hiçbir modül `sys.platform`'a bakmaz.
 - **Süreç denetimi** (`runtime.py`) — çalan `ffplay`'i bulmak, duraklatmak ve
   kesmek için `psutil` kullanılır. Duraklatma POSIX'te `SIGSTOP`, Windows'ta
   `NtSuspendProcess`'tir; `psutil` ikisini tek çağrının arkasına saklar.
-  `pakize dur` her platformda **önce sesi susturur, sonra süreci sonlandırır**:
+  `pakize stop` her platformda **önce sesi susturur, sonra süreci sonlandırır**:
   Windows'ta süreç sonlandırma sinyal işleyicisini çalıştırmaz, dolayısıyla ana
   süreç kendi `ffplay`'ini kesemeden ölür ve ses öksüz kalıp çalmayı sürdürürdü.
 - **Pano** (`sources/clipboard.py`) — sistemin kendi aracı her zaman önce

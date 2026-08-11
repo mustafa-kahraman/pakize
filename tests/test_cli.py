@@ -48,7 +48,7 @@ def test_son_en_yeni_dosyayi_calar(cikti_dizini, calinanlar):
     _ses_yaz(cikti_dizini, "eski.mp3", mtime=1_000)
     yeni = _ses_yaz(cikti_dizini, "yeni.mp3", mtime=2_000)
 
-    sonuc = runner.invoke(cli.app, ["son"])
+    sonuc = runner.invoke(cli.app, ["replay"])
 
     assert sonuc.exit_code == 0
     assert calinanlar == [yeni]
@@ -58,7 +58,7 @@ def test_son_listeleme_yeniden_eskiye_siralar(cikti_dizini, calinanlar):
     _ses_yaz(cikti_dizini, "eski.mp3", mtime=1_000)
     _ses_yaz(cikti_dizini, "yeni.mp3", mtime=2_000)
 
-    sonuc = runner.invoke(cli.app, ["son", "--list"])
+    sonuc = runner.invoke(cli.app, ["replay", "--list"])
 
     assert sonuc.exit_code == 0
     assert sonuc.stdout.index("yeni.mp3") < sonuc.stdout.index("eski.mp3")
@@ -66,7 +66,7 @@ def test_son_listeleme_yeniden_eskiye_siralar(cikti_dizini, calinanlar):
 
 
 def test_son_ses_yoksa_anlamli_hata(cikti_dizini, calinanlar):
-    sonuc = runner.invoke(cli.app, ["son"])
+    sonuc = runner.invoke(cli.app, ["replay"])
 
     assert sonuc.exit_code == 1
     assert "ses dosyası yok" in sonuc.stdout
@@ -83,7 +83,7 @@ def test_son_calarken_surec_kaydedilir(cikti_dizini, monkeypatch):
         cli.audio, "play", lambda path: kayitli.append(cli.runtime.running_pid())
     )
 
-    sonuc = runner.invoke(cli.app, ["son"])
+    sonuc = runner.invoke(cli.app, ["replay"])
 
     assert sonuc.exit_code == 0
     assert kayitli == [os.getpid()]
@@ -94,7 +94,7 @@ def test_son_ses_disi_dosyalari_yoksayar(cikti_dizini, calinanlar):
     _ses_yaz(cikti_dizini, "notlar.txt", mtime=3_000)
     ses = _ses_yaz(cikti_dizini, "kayit.mp3", mtime=2_000)
 
-    sonuc = runner.invoke(cli.app, ["son"])
+    sonuc = runner.invoke(cli.app, ["replay"])
 
     assert sonuc.exit_code == 0
     assert calinanlar == [ses]
@@ -260,7 +260,7 @@ def test_dur_calan_sureci_sonlandirir(monkeypatch):
         cli.runtime, "stop", lambda pid: bool(durdurulan.append(pid) or True)
     )
 
-    sonuc = runner.invoke(cli.app, ["dur"])
+    sonuc = runner.invoke(cli.app, ["stop"])
 
     assert sonuc.exit_code == 0
     assert durdurulan == [4242]
@@ -270,7 +270,7 @@ def test_dur_calan_sureci_sonlandirir(monkeypatch):
 def test_dur_calan_yoksa_bilgi_verir(monkeypatch):
     monkeypatch.setattr(cli.runtime, "running_pids", lambda: [])
 
-    sonuc = runner.invoke(cli.app, ["dur"])
+    sonuc = runner.invoke(cli.app, ["stop"])
 
     assert sonuc.exit_code == 1
     assert "Çalan bir seslendirme yok." in sonuc.stdout
@@ -280,7 +280,7 @@ def test_dur_surec_arada_olmusse_bilgi_verir(monkeypatch):
     monkeypatch.setattr(cli.runtime, "running_pids", lambda: [4242])
     monkeypatch.setattr(cli.runtime, "stop", lambda pid: False)
 
-    sonuc = runner.invoke(cli.app, ["dur"])
+    sonuc = runner.invoke(cli.app, ["stop"])
 
     assert sonuc.exit_code == 1
     assert "zaten sonlanmış" in sonuc.stdout

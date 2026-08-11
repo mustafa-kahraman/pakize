@@ -176,8 +176,8 @@ def speak(
             raise typer.Exit(code=130) from None
 
 
-@app.command()
-def kitap(
+@app.command("book")
+def narrate_book(
     source: Path = typer.Argument(
         ...,
         help="Seslendirilecek kitap (.txt, .md, .epub, .pdf, .mobi ...).",
@@ -261,7 +261,7 @@ def kitap(
 
 
 @app.command()
-def duraklat() -> None:
+def pause() -> None:
     """Çalmakta olan seslendirmeyi duraklatır; duraklatılmışsa sürdürür.
 
     Tek komutun iki işi görmesi kasıtlı: klavye kısayolunda aynı tuşla hem
@@ -284,7 +284,7 @@ def duraklat() -> None:
 
 
 @app.command()
-def dur() -> None:
+def stop() -> None:
     """Çalmakta olan seslendirmeyi durdurur."""
     pids = runtime.running_pids()
     if not pids:
@@ -298,7 +298,7 @@ def dur() -> None:
 
 
 @app.command()
-def son(
+def replay(
     listele: bool = typer.Option(
         False, "--list", "-l", help="Çalmak yerine son üretilen sesleri listele."
     ),
@@ -322,7 +322,7 @@ def son(
 
     typer.echo(f"Çalınıyor: {kayitlar[0]}")
     try:
-        # Buradan çalan ses de `pakize dur`/`duraklat` ile yönetilebilmeli.
+        # Buradan çalan ses de `pakize stop`/`pause` ile yönetilebilmeli.
         with _durdurulabilir(True):
             audio.play(kayitlar[0])
     except KeyboardInterrupt:
@@ -473,10 +473,10 @@ def _bildir(etkilenen: int, toplam: int, basari: str, bos_mesaj: str) -> None:
 
 @contextlib.contextmanager
 def _durdurulabilir(enabled: bool):
-    """Çalma süresince süreci `pakize dur` ile durdurulabilir kılar.
+    """Çalma süresince süreci `pakize stop` ile durdurulabilir kılar.
 
     Sinyal geldiğinde önce çalan ses kesilir, sonra `KeyboardInterrupt`
-    yükseltilir; böylece Ctrl+C ile `pakize dur` aynı yoldan ilerler ve
+    yükseltilir; böylece Ctrl+C ile `pakize stop` aynı yoldan ilerler ve
     arkada üretilmeye devam eden parçalar da iptal olur.
     """
     if not enabled:

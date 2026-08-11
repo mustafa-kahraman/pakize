@@ -158,7 +158,7 @@ def stop_playback() -> bool:
 def _resume(process) -> None:
     """Duraklatılmış olabilecek süreci devam ettirir.
 
-    `pakize duraklat` ile durdurulmuş bir süreç sonlandırma isteğini işleyemez.
+    `pakize pause` ile durdurulmuş bir süreç sonlandırma isteğini işleyemez.
     Beklemede bırakıp sonradan devam ettirmek yetmiyor: ffplay bu durumda
     isteği yutup çalmayı sürdürüyor. Önce devam ettirip sonra sonlandırmak
     gerekiyor.
@@ -198,7 +198,7 @@ def _check_player_exit(
     """ffplay çıkışını değerlendirir.
 
     Kasıtlı olarak kesilen ya da sonlandırma sinyaliyle biten çalma hata
-    değildir; `pakize dur` ve Ctrl+C beklenen bir sonlanma yoludur.
+    değildir; `pakize stop` ve Ctrl+C beklenen bir sonlanma yoludur.
     """
     if kesildi or returncode in (0, None) or returncode in _TERMINATION_CODES:
         return

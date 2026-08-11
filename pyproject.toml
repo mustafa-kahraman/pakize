@@ -1,6 +1,6 @@
 [project]
 name = "pakize"
-version = "0.2.0"
+version = "0.3.0"
 description = "Metni ses dosyasına çeviren, kod bloklarını okumayan yerel TTS aracı"
 readme = "README.md"
 authors = [

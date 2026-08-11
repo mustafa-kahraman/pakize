@@ -1,6 +1,6 @@
 """Çalmakta olan seslendirmenin süreç kaydı ve denetimi.
 
-`pakize dur` ve `pakize duraklat`, çalmayı başlatan sürece ulaşabilmek için bu
+`pakize stop` ve `pakize pause`, çalmayı başlatan sürece ulaşabilmek için bu
 kaydı okur. Kayıt geçici dizin altında tutulur; oturum kapanınca işletim
 sistemi temizler.
 
