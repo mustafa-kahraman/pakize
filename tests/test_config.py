@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from pakize import platforms
 from pakize.config import Config, load_config
 from pakize.models import Action, SegmentType
 
@@ -28,8 +29,9 @@ def test_skaler_ayarlar_ezilir(tmp_path):
     assert config.max_chunk_chars == 900
 
 
-def test_cikti_dizini_varsayilani_tmp_altindadir():
-    assert Config().output_dir == Path("/tmp/pakize")
+def test_cikti_dizini_varsayilani_gecici_dizin_altindadir():
+    """Sabit `/tmp` değil: Windows'ta `%TEMP%`, macOS'ta oturuma özel klasör."""
+    assert Config().output_dir == platforms.temp_root() / "pakize"
 
 
 def test_cikti_dizini_ve_yollar_genisletilir(tmp_path):

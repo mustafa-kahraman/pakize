@@ -22,6 +22,7 @@ from typing import Callable
 
 from .config import Config
 from .pipeline import SpeechResult, synthesize
+from .platforms import install_hint
 
 TEXT_SUFFIXES = frozenset({".txt", ".md", ".markdown", ".text"})
 """Doğrudan okunabilen biçimler; diğerleri önce dönüştürülür."""
@@ -96,7 +97,7 @@ def load_text(path: Path) -> str:
     if converter is None:
         raise BookError(
             f"{path.suffix} biçimi için {CONVERTER} gerekli "
-            f"(Calibre ile gelir): sudo apt install calibre"
+            f"(Calibre ile gelir): {install_hint('calibre')}"
         )
 
     with tempfile.TemporaryDirectory(prefix="pakize-kitap-") as workdir:

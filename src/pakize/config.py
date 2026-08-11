@@ -11,12 +11,12 @@ gömülü bir kural değil, kullanıcının değiştirebildiği bir tercih olur.
 
 from __future__ import annotations
 
-import os
 import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .models import Action, SegmentType
+from .platforms import config_home, temp_root
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -37,8 +37,12 @@ DEFAULT_POLICY: dict[SegmentType, Action] = {
     SegmentType.HORIZONTAL_RULE: Action.SKIP,
 }
 
-DEFAULT_OUTPUT_DIR = Path("/tmp/pakize")
-"""Çıktı yolu verilmediğinde seslerin yazıldığı dizin."""
+DEFAULT_OUTPUT_DIR = temp_root() / "pakize"
+"""Çıktı yolu verilmediğinde seslerin yazıldığı dizin.
+
+Sistemin geçici dizini altındadır: Linux'ta `/tmp/pakize`, Windows'ta
+`%TEMP%\\pakize`. Kalıcı arşiv isteyen `output_dir` ayarını değiştirir.
+"""
 
 
 @dataclass(frozen=True)
@@ -110,10 +114,12 @@ def _signed_percent(multiplier: float) -> str:
 
 
 def config_path() -> Path:
-    """Kullanıcı config dosyasının yolu (XDG_CONFIG_HOME'a saygı duyar)."""
-    base = os.environ.get("XDG_CONFIG_HOME")
-    root = Path(base) if base else Path.home() / ".config"
-    return root / "pakize" / "config.toml"
+    """Kullanıcı config dosyasının yolu.
+
+    Linux ve macOS'ta `~/.config/pakize/config.toml`, Windows'ta
+    `%APPDATA%\\pakize\\config.toml`; `XDG_CONFIG_HOME` her üçünde de önceliklidir.
+    """
+    return config_home() / "pakize" / "config.toml"
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -271,12 +277,17 @@ def write_default_config(path: Path | None = None) -> Path:
 
 
 def _toml_value(value: object) -> str:
-    """Python değerini TOML gösterimine çevirir."""
+    """Python değerini TOML gösterimine çevirir.
+
+    Ters bölü TOML dizgisinde kaçış başlatır: `%TEMP%\\pakize` gibi bir Windows
+    yolunu olduğu gibi yazmak, kendi ürettiğimiz dosyayı okunamaz kılardı.
+    """
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return str(value)
-    return f'"{value}"'
+    kacisli = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{kacisli}"'
 
 
 def _merge_policy(
