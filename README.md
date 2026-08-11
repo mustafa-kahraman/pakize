@@ -11,6 +11,15 @@ işaretlerini de politikaya göre eler.
 - **Denetim** — klavye kısayoluyla oku, duraklat, durdur
 - **Platformlar** — Linux, macOS ve Windows
 
+> **Resmî olmayan servisler.** Pakize sesi `edge-tts` üzerinden Microsoft'un
+> Edge "Read Aloud" ucundan, çeviriyi Google'ın ücretsiz çeviri ucundan alır.
+> İkisi de **belgelenmiş, resmî olarak desteklenen API'ler değildir**: kota
+> belirsizdir, herhangi bir zaman değişebilir ya da kapanabilir ve ilgili
+> şirketlerin kullanım şartları üçüncü taraf kullanımını öngörmez. Kişisel
+> kullanım için düşünülmüştür; ticari ya da yoğun kullanım öncesinde bunu
+> değerlendirmek sana düşer. Ağ gerektirmeyen tam yerel bir alternatif için
+> [Piper](#çevrimdışı-yedek-piper) bölümüne bak.
+
 ## Kurulum
 
 Linux, macOS ve Windows'ta aynı dört adım. Üçünde de yaklaşık beş dakika sürer.
@@ -720,3 +729,20 @@ yoktur; motor ve birleştirme yamalanır.
 ```bash
 uv run pytest
 ```
+
+## Lisans
+
+[MIT](LICENSE) — kullan, değiştir, dağıt; tek şart telif notunu korumak.
+
+Bağımlılıkların lisansları ayrıdır ve kendi koşullarına tabidir:
+
+| Bağımlılık | Lisans |
+|------------|--------|
+| `edge-tts` | LGPL-3.0 |
+| `typer` | MIT |
+| `psutil` | BSD-3-Clause |
+| `tomli` | MIT |
+
+`edge-tts` LGPL'dir ama Pakize onu paketin içine gömmez; ayrı bir paket olarak
+kurulur ve içe aktarılır. LGPL bu kullanımı açıkça serbest bırakır, bu yüzden
+Pakize'nin kendi kodu MIT kalabilir.
