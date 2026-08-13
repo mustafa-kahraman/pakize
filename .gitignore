@@ -18,3 +18,6 @@ __pycache__/
 
 # Paketleme çıktısı
 dist/
+
+# Sosyal medya taslakları — depoya değil, kişisel kullanıma ait
+paylasim/
