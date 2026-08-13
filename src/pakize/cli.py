@@ -35,6 +35,7 @@ from .sources import (
     latest_session,
     read_clipboard,
 )
+from .translate import GoogleTranslator
 
 app = typer.Typer(
     help="Metni ses dosyasına çevirir; kod bloklarını okumaz.",
@@ -117,6 +118,7 @@ def speak(
     ),
 ) -> None:
     """Bir metni seslendirir."""
+    _ilk_kurulum_ipucu()
     try:
         text = _read_source(
             source,
@@ -223,6 +225,7 @@ def narrate_book(
     Var olan bölümler atlanır; yarıda kalan iş aynı komutla kaldığı yerden
     devam eder.
     """
+    _ilk_kurulum_ipucu()
     config = _resolved_config(
         voice=voice, rate=rate, engine=engine, translate_to=translate
     )
@@ -355,26 +358,43 @@ def voices(
             typer.secho(f"{language} için ses bulunamadı.", fg=typer.colors.YELLOW)
             return
         _print_voices(found)
+        typer.echo("")
+        typer.echo(f"Seçmek için: pakize config set voice {found[0]['ShortName']}")
         return
 
-    # Bayrak verilmediğinde tam döküm yerine özet: Türkçe sesler öne çıkar,
-    # diğer 70+ dil tek satırlık başlıklarla listelenir; 300+ satır dökülmez.
+    # Bayrak verilmediğinde tam döküm yerine özet: aktif sesin dili öne çıkar,
+    # kalan 70+ dil tek satırlık başlıklarla listelenir; 300+ satır dökülmez.
     all_voices = asyncio.run(EdgeEngine.list_voices(None))
-    turkce = [v for v in all_voices if v["Locale"].startswith("tr-")]
-    digerleri = [v for v in all_voices if not v["Locale"].startswith("tr-")]
+    aktif = load_config().voice
+    dil_kodu = aktif.split("-")[0].lower()
+    kendi_dili = [
+        v for v in all_voices if v["Locale"].lower().startswith(dil_kodu + "-")
+    ]
+    digerleri = [
+        v for v in all_voices if not v["Locale"].lower().startswith(dil_kodu + "-")
+    ]
 
-    typer.secho("── Türkçe ──", bold=True)
-    _print_voices(turkce)
+    if kendi_dili:
+        ilk = kendi_dili[0]
+        dil_adi = ilk.get("LocaleName", ilk["Locale"]).split(" (")[0]
+        typer.secho(f"── {dil_adi} (aktif ses: {aktif}) ──", bold=True)
+        _print_voices(kendi_dili, aktif=aktif)
+        typer.echo("")
 
-    typer.echo("")
     typer.secho("── Diğer diller (ayrıntı için: pakize voices -l de) ──", bold=True)
     for kod, ad, adet in _language_summary(digerleri):
         typer.echo(f"{kod:<8} {ad:<32} {adet} ses")
 
+    typer.echo("")
+    typer.echo("Ses seçimi için sihirbaz: pakize setup")
 
-def _print_voices(entries: list[dict]) -> None:
+
+def _print_voices(entries: list[dict], aktif: str | None = None) -> None:
     for entry in entries:
-        typer.echo(f"{entry['ShortName']:<34} {entry['Gender']:<8} {entry['Locale']}")
+        isaret = "  ← aktif" if entry["ShortName"] == aktif else ""
+        typer.echo(
+            f"{entry['ShortName']:<34} {entry['Gender']:<8} {entry['Locale']}{isaret}"
+        )
 
 
 def _language_summary(entries: list[dict]) -> list[tuple[str, str, int]]:
@@ -393,6 +413,112 @@ def _language_summary(entries: list[dict]) -> list[tuple[str, str, int]]:
         ad = ilk.get("LocaleName", ilk["Locale"]).split(" (")[0]
         ozet.append((kod, ad, len(gruplar[kod])))
     return ozet
+
+
+@app.command()
+def setup() -> None:
+    """Kurulum sihirbazı: dil ve ses seç, örneğini dinle, config'e yaz."""
+    import asyncio
+
+    try:
+        all_voices = asyncio.run(EdgeEngine.list_voices(None))
+    except Exception as exc:
+        typer.secho(f"Ses listesi alınamadı: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from None
+
+    diller = {kod: (ad, adet) for kod, ad, adet in _language_summary(all_voices)}
+    typer.secho("Diller:", bold=True)
+    for kod, (ad, adet) in diller.items():
+        typer.echo(f"  {kod:<8} {ad:<32} {adet} ses")
+
+    dil = typer.prompt("\nDil kodu", default="tr").strip().lower()
+    while dil not in diller:
+        typer.secho(f"Tanınmayan dil kodu: {dil!r}", fg=typer.colors.YELLOW)
+        dil = typer.prompt("Dil kodu", default="tr").strip().lower()
+
+    sesler = [
+        v for v in all_voices if v["Locale"].lower().startswith(dil + "-")
+    ]
+    typer.echo("")
+    for sira, entry in enumerate(sesler, start=1):
+        typer.echo(f" {sira:>2}) {entry['ShortName']:<34} {entry['Gender']}")
+
+    typer.echo("\nNumara: örneği dinle • s+numara: seç (örn. s2) • q: çık")
+    while True:
+        secim = typer.prompt(">").strip().lower()
+        if secim == "q":
+            typer.echo("Bir şey yazılmadı.")
+            return
+
+        sec = secim.startswith("s")
+        try:
+            sira = int(secim[1:] if sec else secim)
+            ses = sesler[sira - 1]["ShortName"]
+        except (ValueError, IndexError):
+            typer.secho(f"Geçersiz seçim: {secim!r}", fg=typer.colors.YELLOW)
+            continue
+
+        if not sec:
+            _play_sample(ses, dil)
+            continue
+
+        path = config_path()
+        yazilan = set_config_value("voice", ses, path)
+        typer.secho(f"Yazıldı: voice = {yazilan}", fg=typer.colors.GREEN)
+        typer.echo(f"Config dosyası: {path}")
+        if dil != "tr":
+            typer.echo(
+                "Başka dildeki metinleri bu dile çevirtmek istersen: "
+                f"pakize config set translate_to {dil}"
+            )
+        return
+
+
+_SAMPLE_TEXT_TR = (
+    "Merhaba! Bu, seçtiğiniz sesin kısa bir örneği. "
+    "Pakize metinlerinizi bu sesle okuyacak."
+)
+_SAMPLE_TEXT_EN = (
+    "Hello! This is a short sample of the selected voice. "
+    "Pakize will read your texts with this voice."
+)
+
+
+def _sample_text(dil: str) -> str:
+    """Örnek cümleyi hedef dilde üretir.
+
+    75 dillik elle çeviri sözlüğü tutmamak için mevcut çeviri katmanı
+    kullanılır; servis çalışmazsa İngilizce yedek cümleye düşülür.
+    """
+    if dil == "tr":
+        return _SAMPLE_TEXT_TR
+    if dil == "en":
+        return _SAMPLE_TEXT_EN
+    try:
+        return GoogleTranslator(target=dil).translate_lines([_SAMPLE_TEXT_TR])[0]
+    except TranslationError:
+        return _SAMPLE_TEXT_EN
+
+
+def _play_sample(ses: str, dil: str) -> None:
+    """Seçilen sesle kısa bir örnek üretip çalar.
+
+    Örnek dosya kalıcı çıktı dizinine değil geçici bir klasöre yazılır; yoksa
+    `pakize replay` listesinde örnek denemeler birikirdi.
+    """
+    import asyncio
+    import tempfile
+
+    typer.echo("Örnek hazırlanıyor...")
+    with tempfile.TemporaryDirectory(prefix="pakize-ornek-") as tmp:
+        hedef = Path(tmp) / "ornek.mp3"
+        config = replace(load_config(), voice=ses)
+        try:
+            asyncio.run(EdgeEngine(config).synthesize(_sample_text(dil), hedef))
+        except EngineError as exc:
+            typer.secho(f"Örnek üretilemedi: {exc}", fg=typer.colors.YELLOW, err=True)
+            return
+        audio.play(hedef)
 
 
 config_app = typer.Typer(invoke_without_command=True)
@@ -537,6 +663,21 @@ def _read_source(
         )
         raise typer.Exit(code=1)
     return sys.stdin.read()
+
+
+def _ilk_kurulum_ipucu() -> None:
+    """Config dosyası henüz yoksa kurulum sihirbazını hatırlatır.
+
+    Dosya oluşur oluşmaz susar; ilk kullanıcıyı bir kez yakalamak yeterli,
+    her çalıştırmada tekrarlanan ipucu gürültü olurdu.
+    """
+    if config_path().is_file():
+        return
+    typer.secho(
+        "İpucu: dil ve ses seçimi için 'pakize setup' (bir kez yeter).",
+        fg=typer.colors.CYAN,
+        err=True,
+    )
 
 
 def _bos_girdi_mesaji(clipboard: bool, transcript: bool) -> str:

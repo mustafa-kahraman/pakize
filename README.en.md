@@ -235,7 +235,8 @@ pakize stop                   # stop the playback in progress
 pakize replay                 # replay the most recently produced audio
 pakize replay --list          # list recent recordings with timestamps
 pakize replay --list -n 30    # show more of them
-pakize voices                 # Turkish voices + a summary of other languages
+pakize setup                  # wizard: pick language and voice, hear a sample
+pakize voices                 # active language's voices + a summary of the rest
 pakize voices -l de           # list one language's voices
 pakize voices -l all          # list every voice
 pakize config                 # show effective settings
@@ -606,6 +607,19 @@ list; engine names are limited to the known ones. With a non-Turkish main
 language, texts in that language are read directly by the chosen voice, and
 combined with `translate_to` the translations of other languages come from the
 same voice too.
+
+For anyone unsure which voice to pick there is a wizard:
+
+```bash
+pakize setup
+```
+
+The wizard lists the languages, numbers the chosen language's voices and plays
+a short sample sentence on request; the selection is written to the config.
+Running `speak`/`book` before a config file exists also prints a one-line hint
+pointing to the wizard. `pakize voices` always features the active voice's
+language at the top — pick a German voice and the next `voices` call lists the
+German voices first.
 
 ```toml
 voice = "tr-TR-EmelNeural"       # tr-TR-AhmetNeural is also available

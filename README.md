@@ -228,7 +228,8 @@ pakize stop                   # çalmakta olan seslendirmeyi durdur
 pakize replay                 # en son üretilen sesi yeniden çal
 pakize replay --list          # son üretilen sesleri tarihiyle listele
 pakize replay --list -n 30    # daha fazlasını göster
-pakize voices                 # Türkçe sesler + diğer dillerin özeti
+pakize setup                  # sihirbaz: dil ve ses seç, örneğini dinle
+pakize voices                 # aktif dilin sesleri + diğer dillerin özeti
 pakize voices -l de           # bir dilin seslerini listele
 pakize voices -l all          # tüm sesleri listele
 pakize config                 # etkin ayarları göster
@@ -588,6 +589,19 @@ satırı değiştirir. Ses adı servis listesine karşı doğrulanır; motor ad�
 tanınanlarla sınırlıdır. Türkçe dışında bir ana dil kullanan, seçtiği dilin
 metinlerini doğrudan o sesle dinler; `translate_to` ile birleştirirse başka
 dildeki metinlerin çevirisini de aynı sesten dinler.
+
+Hangi sesi seçeceğini bilmeyen için sihirbaz var:
+
+```bash
+pakize setup
+```
+
+Sihirbaz dilleri listeler, seçilen dilin seslerini numaralar ve istenen sesin
+kısa bir örnek cümlesini çalarak dinletir; seçim config'e yazılır. Config
+dosyası henüz yokken `speak`/`book` çalıştıran da tek satırlık bir ipucuyla
+sihirbaza yönlendirilir. `pakize voices` her zaman üstte aktif sesin dilini
+tam listeler — Almanca ses seçen, bir dahaki `voices` çağrısında üstte Almanca
+sesleri görür.
 
 ```toml
 voice = "tr-TR-EmelNeural"       # tr-TR-AhmetNeural de var

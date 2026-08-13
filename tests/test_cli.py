@@ -411,17 +411,39 @@ def ses_listesi(monkeypatch):
     monkeypatch.setattr(cli.EdgeEngine, "list_voices", staticmethod(sahte))
 
 
-def test_voices_ozet_gorunumu_turkceyi_one_cikarir(ses_listesi):
+def test_voices_ozet_gorunumu_aktif_sesin_dilini_one_cikarir(
+    ses_listesi, cikti_dizini
+):
     sonuc = runner.invoke(cli.app, ["voices"])
 
     assert sonuc.exit_code == 0
-    assert "Türkçe" in sonuc.stdout
-    assert "tr-TR-EmelNeural" in sonuc.stdout
+    # Varsayılan ses Türkçe olduğundan üstte Türkçe blok görünür.
+    assert "Turkish" in sonuc.stdout
+    assert "aktif ses: tr-TR-EmelNeural" in sonuc.stdout
+    assert "← aktif" in sonuc.stdout
     # Diğer diller tek satırlık özet olarak görünür; sesler dökülmez.
     assert "de-AT-IngridNeural" not in sonuc.stdout
     assert "German" in sonuc.stdout
     assert "2 ses" in sonuc.stdout
     assert "English" in sonuc.stdout
+    assert "pakize setup" in sonuc.stdout
+
+
+def test_voices_ozet_gorunumu_almanca_sese_uyar(ses_listesi, monkeypatch):
+    """Aktif ses Almancaysa üstte Almanca sesler listelenir, Türkçe özete düşer."""
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda *args, **kwargs: replace(Config(), voice="de-AT-IngridNeural"),
+    )
+
+    sonuc = runner.invoke(cli.app, ["voices"])
+
+    assert sonuc.exit_code == 0
+    assert "aktif ses: de-AT-IngridNeural" in sonuc.stdout
+    assert "de-DE-KatjaNeural" in sonuc.stdout
+    assert "tr-TR-EmelNeural" not in sonuc.stdout
+    assert "Turkish" in sonuc.stdout  # özet satırı
 
 
 def test_voices_dil_filtresi_yalniz_o_dili_listeler(ses_listesi):
@@ -431,6 +453,8 @@ def test_voices_dil_filtresi_yalniz_o_dili_listeler(ses_listesi):
     assert "de-AT-IngridNeural" in sonuc.stdout
     assert "de-DE-KatjaNeural" in sonuc.stdout
     assert "tr-TR-EmelNeural" not in sonuc.stdout
+    # Çıktı, kopyala-yapıştır bir sonraki adımla biter.
+    assert "config set voice de-AT-IngridNeural" in sonuc.stdout
 
 
 def test_voices_bilinmeyen_dil_anlamli_mesaj_verir(ses_listesi):
@@ -500,3 +524,70 @@ def test_config_set_bilinmeyen_motoru_reddeder(config_dosyasi):
     assert sonuc.exit_code == 1
     assert "Bilinmeyen motor" in sonuc.stderr
     assert not config_dosyasi.exists()
+
+
+def test_setup_dil_ve_ses_secip_yazar(ses_listesi, config_dosyasi):
+    sonuc = runner.invoke(cli.app, ["setup"], input="de\ns1\n")
+
+    assert sonuc.exit_code == 0
+    assert "German" in sonuc.stdout  # dil özeti gösterildi
+    assert "de-AT-IngridNeural" in sonuc.stdout  # numaralı liste
+    assert 'voice = "de-AT-IngridNeural"' in config_dosyasi.read_text(encoding="utf-8")
+    # Türkçe dışı seçimde çeviri ipucu verilir.
+    assert "translate_to de" in sonuc.stdout
+
+
+def test_setup_ornek_dinletir(ses_listesi, config_dosyasi, calinanlar, monkeypatch):
+    """Numara girilince örnek çalınır, s+numara ile seçim yazılır."""
+
+    async def sahte_synthesize(self, text, destination):
+        destination.write_bytes(b"sahte-ornek")
+
+    monkeypatch.setattr(cli.EdgeEngine, "synthesize", sahte_synthesize)
+    monkeypatch.setattr(cli, "_sample_text", lambda dil: "Hallo")
+
+    sonuc = runner.invoke(cli.app, ["setup"], input="de\n2\ns2\n")
+
+    assert sonuc.exit_code == 0
+    assert len(calinanlar) == 1
+    assert 'voice = "de-DE-KatjaNeural"' in config_dosyasi.read_text(encoding="utf-8")
+
+
+def test_setup_gecersiz_girdide_tekrar_sorar(ses_listesi, config_dosyasi):
+    sonuc = runner.invoke(cli.app, ["setup"], input="xx\nde\nabc\ns99\ns1\n")
+
+    assert sonuc.exit_code == 0
+    assert "Tanınmayan dil kodu" in sonuc.stdout
+    assert "Geçersiz seçim" in sonuc.stdout
+    assert 'voice = "de-AT-IngridNeural"' in config_dosyasi.read_text(encoding="utf-8")
+
+
+def test_setup_q_ile_yazmadan_cikar(ses_listesi, config_dosyasi):
+    sonuc = runner.invoke(cli.app, ["setup"], input="de\nq\n")
+
+    assert sonuc.exit_code == 0
+    assert not config_dosyasi.exists()
+
+
+def test_ilk_kurulum_ipucu_config_yokken_gosterilir(
+    cikti_dizini, config_dosyasi, tmp_path
+):
+    kaynak = tmp_path / "metin.md"
+    kaynak.write_text("Merhaba.\n", encoding="utf-8")
+
+    sonuc = runner.invoke(cli.app, ["speak", str(kaynak), "--dry-run"])
+
+    assert sonuc.exit_code == 0
+    assert "pakize setup" in sonuc.stderr
+
+
+def test_ilk_kurulum_ipucu_config_varsa_susar(cikti_dizini, config_dosyasi, tmp_path):
+    config_dosyasi.parent.mkdir(parents=True, exist_ok=True)
+    config_dosyasi.write_text("rate = 1.0\n", encoding="utf-8")
+    kaynak = tmp_path / "metin.md"
+    kaynak.write_text("Merhaba.\n", encoding="utf-8")
+
+    sonuc = runner.invoke(cli.app, ["speak", str(kaynak), "--dry-run"])
+
+    assert sonuc.exit_code == 0
+    assert "pakize setup" not in sonuc.stderr
