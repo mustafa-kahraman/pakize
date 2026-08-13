@@ -5,6 +5,10 @@
 [![CI](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml/badge.svg)](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/pakize?logo=pypi&logoColor=white)](https://pypi.org/project/pakize/)
 
+https://github.com/mustafa-kahraman/pakize/raw/main/docs/demo-en.mp4
+
+> A 24-second tour — turn the sound on. The narration was produced by Pakize itself.
+
 A local tool that turns text into audio. It understands Markdown: it **does not
 read code blocks** — it replaces them with a short announcement — and filters
 tables, links and formatting marks according to a policy you control.
