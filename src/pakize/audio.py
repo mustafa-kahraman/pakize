@@ -58,9 +58,9 @@ def concat(parts: list[Path], destination: Path) -> Path:
         raise AudioError(_("Birleştirilecek ses parçası yok"))
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    donusum_gerekli = _needs_transcode(parts, destination)
+    needs_transcode = _needs_transcode(parts, destination)
 
-    if len(parts) == 1 and not donusum_gerekli:
+    if len(parts) == 1 and not needs_transcode:
         shutil.copyfile(parts[0], destination)
         return destination
 
@@ -84,7 +84,7 @@ def concat(parts: list[Path], destination: Path) -> Path:
                 "0",
                 "-i",
                 str(list_file),
-                *_codec_args(donusum_gerekli),
+                *_codec_args(needs_transcode),
                 str(destination),
             ]
         )
@@ -96,12 +96,12 @@ def concat(parts: list[Path], destination: Path) -> Path:
 
 def _needs_transcode(parts: list[Path], destination: Path) -> bool:
     """Parçaların biçimi hedefinkinden farklı mı?"""
-    hedef = destination.suffix.lower()
-    return any(part.suffix.lower() != hedef for part in parts)
+    target = destination.suffix.lower()
+    return any(part.suffix.lower() != target for part in parts)
 
 
-def _codec_args(donusum_gerekli: bool) -> list[str]:
-    return ["-vn"] if donusum_gerekli else ["-c", "copy"]
+def _codec_args(needs_transcode: bool) -> list[str]:
+    return ["-vn"] if needs_transcode else ["-c", "copy"]
 
 
 def play(path: Path) -> None:
@@ -116,8 +116,8 @@ def play(path: Path) -> None:
         # `_` çeviri fonksiyonu olduğu için atılacak değer `_out` adını alır.
         _out, stderr = process.communicate()
     finally:
-        kesildi = _clear_player(process)
-    _check_player_exit(process.returncode, stderr, kesildi)
+        interrupted = _clear_player(process)
+    _check_player_exit(process.returncode, stderr, interrupted)
 
 
 async def play_async(path: Path) -> None:
@@ -134,8 +134,8 @@ async def play_async(path: Path) -> None:
     try:
         _out, stderr = await process.communicate()
     finally:
-        kesildi = _clear_player(process)
-    _check_player_exit(process.returncode, stderr, kesildi)
+        interrupted = _clear_player(process)
+    _check_player_exit(process.returncode, stderr, interrupted)
 
 
 def stop_playback() -> bool:
@@ -190,19 +190,19 @@ def _clear_player(process) -> bool:
         if _player is not process:
             return False
         _player = None
-        kesildi, _stopped = _stopped, False
-        return kesildi
+        interrupted, _stopped = _stopped, False
+        return interrupted
 
 
 def _check_player_exit(
-    returncode: int | None, stderr: bytes | None, kesildi: bool = False
+    returncode: int | None, stderr: bytes | None, interrupted: bool = False
 ) -> None:
     """ffplay çıkışını değerlendirir.
 
     Kasıtlı olarak kesilen ya da sonlandırma sinyaliyle biten çalma hata
     değildir; `pakize stop` ve Ctrl+C beklenen bir sonlanma yoludur.
     """
-    if kesildi or returncode in (0, None) or returncode in _TERMINATION_CODES:
+    if interrupted or returncode in (0, None) or returncode in _TERMINATION_CODES:
         return
     detail = (stderr or b"").decode(errors="replace").strip()
     raise AudioError(

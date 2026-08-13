@@ -137,7 +137,11 @@ def speak(
         raise typer.Exit(code=1) from exc
 
     if not text.strip():
-        typer.secho(_bos_girdi_mesaji(clipboard, transcript), fg=typer.colors.RED, err=True)
+        typer.secho(
+            _empty_input_message(clipboard, transcript),
+            fg=typer.colors.RED,
+            err=True,
+        )
         raise typer.Exit(code=1)
 
     config = _resolved_config(
@@ -152,7 +156,7 @@ def speak(
     # Akıcı modda parçalar üretildikçe çalınır; sonda ikinci kez çalmayız.
     streaming = play and config.stream
     try:
-        with _durdurulabilir(play):
+        with _stoppable(play):
             result = synthesize(
                 text,
                 destination,
@@ -191,7 +195,7 @@ def speak(
 
     if play and not streaming:
         try:
-            with _durdurulabilir(True):
+            with _stoppable(True):
                 audio.play(result.output)
         except KeyboardInterrupt:
             typer.secho("\n" + _("Durduruldu."), fg=typer.colors.YELLOW)
@@ -325,7 +329,7 @@ def pause() -> None:
     # basmak bazılarını duraklatıp bazılarını sürdürerek karmaşa yaratırdı.
     if any(runtime.is_paused(pid) for pid in pids):
         affected = sum(runtime.resume(pid) for pid in pids)
-        _bildir(
+        _report(
             affected,
             len(pids),
             _("Devam ediyor"),
@@ -334,7 +338,7 @@ def pause() -> None:
         return
 
     affected = sum(runtime.pause(pid) for pid in pids)
-    _bildir(
+    _report(
         affected,
         len(pids),
         _("Duraklatıldı"),
@@ -353,28 +357,28 @@ def stop() -> None:
     # Hepsi durdurulur: aynı anda birden çok ses çalıyorsa "durdur" demek
     # sesin kesilmesi demektir, birinin kesilmesi değil.
     affected = sum(runtime.stop(pid) for pid in pids)
-    _bildir(
+    _report(
         affected, len(pids), _("Durduruldu"), _("Seslendirme zaten sonlanmış.")
     )
 
 
 @app.command(help=_("En son üretilen ses dosyasını yeniden çalar."))
 def replay(
-    listele: bool = typer.Option(
+    list_only: bool = typer.Option(
         False,
         "--list",
         "-l",
         help=_("Çalmak yerine son üretilen sesleri listele."),
     ),
-    adet: int = typer.Option(
+    count: int = typer.Option(
         10, "--count", "-n", help=_("Listelenecek kayıt sayısı.")
     ),
 ) -> None:
     """En son üretilen ses dosyasını yeniden çalar."""
     config = _resolved_config()
-    kayitlar = _recent_outputs(config)
+    records = _recent_outputs(config)
 
-    if not kayitlar:
+    if not records:
         typer.secho(
             _("{directory} içinde ses dosyası yok.").format(
                 directory=config.output_dir
@@ -383,17 +387,17 @@ def replay(
         )
         raise typer.Exit(code=1)
 
-    if listele:
-        for path in kayitlar[:adet]:
-            an = datetime.fromtimestamp(path.stat().st_mtime)
-            typer.echo(f"{an:%Y-%m-%d %H:%M:%S}  {path}")
+    if list_only:
+        for path in records[:count]:
+            moment = datetime.fromtimestamp(path.stat().st_mtime)
+            typer.echo(f"{moment:%Y-%m-%d %H:%M:%S}  {path}")
         return
 
-    typer.echo(_("Çalınıyor: {path}").format(path=kayitlar[0]))
+    typer.echo(_("Çalınıyor: {path}").format(path=records[0]))
     try:
         # Buradan çalan ses de `pakize stop`/`pause` ile yönetilebilmeli.
-        with _durdurulabilir(True):
-            audio.play(kayitlar[0])
+        with _stoppable(True):
+            audio.play(records[0])
     except KeyboardInterrupt:
         typer.secho(_("Durduruldu."), fg=typer.colors.YELLOW)
         raise typer.Exit(code=130) from None
@@ -809,9 +813,9 @@ def _read_source(
 ) -> str:
     """Metni kaynaklardan birinden okur; öncelik sırası buradaki sıradır."""
     if transcript or session is not None:
-        kayit = session or latest_session(Path.cwd())
+        record = session or latest_session(Path.cwd())
         # 0, "tamamı" demek; collect None bekliyor.
-        return collect(kayit, last=last or None, roles=roles)
+        return collect(record, last=last or None, roles=roles)
     if clipboard:
         return read_clipboard()
     if source is not None:
@@ -844,7 +848,7 @@ def _first_run_hint() -> None:
     )
 
 
-def _bos_girdi_mesaji(clipboard: bool, transcript: bool) -> str:
+def _empty_input_message(clipboard: bool, transcript: bool) -> str:
     if transcript:
         return _("Transkriptte okunacak bir konuşma bulunamadı.")
     return _("Pano boş.") if clipboard else _("Girdi boş.")
@@ -882,26 +886,26 @@ def _default_output_path(config: Config) -> Path:
     return config.output_dir / f"{stamp}.mp3"
 
 
-def _bildir(etkilenen: int, toplam: int, basari: str, bos_mesaj: str) -> None:
+def _report(affected: int, total: int, success: str, empty_message: str) -> None:
     """Kaç seslendirmenin etkilendiğini bildirir.
 
     Birden çok ses çalıyorsa sayıyı söylemek gerekir; tek sesse sayı gürültü
     olurdu.
     """
-    if not etkilenen:
-        typer.secho(bos_mesaj, fg=typer.colors.YELLOW)
+    if not affected:
+        typer.secho(empty_message, fg=typer.colors.YELLOW)
         raise typer.Exit(code=1)
 
-    ek = (
-        " " + _("({count} seslendirme)").format(count=etkilenen)
-        if toplam > 1
+    suffix = (
+        " " + _("({count} seslendirme)").format(count=affected)
+        if total > 1
         else ""
     )
-    typer.secho(f"{basari}.{ek}", fg=typer.colors.GREEN)
+    typer.secho(f"{success}.{suffix}", fg=typer.colors.GREEN)
 
 
 @contextlib.contextmanager
-def _durdurulabilir(enabled: bool):
+def _stoppable(enabled: bool):
     """Çalma süresince süreci `pakize stop` ile durdurulabilir kılar.
 
     Sinyal geldiğinde önce çalan ses kesilir, sonra `KeyboardInterrupt`
@@ -916,22 +920,25 @@ def _durdurulabilir(enabled: bool):
         audio.stop_playback()
         raise KeyboardInterrupt
 
-    onceki = {sig: signal.signal(sig, handler) for sig in (signal.SIGTERM, signal.SIGINT)}
+    previous_handlers = {
+        sig: signal.signal(sig, handler)
+        for sig in (signal.SIGTERM, signal.SIGINT)
+    }
     runtime.register(os.getpid())
     try:
         yield
     finally:
         runtime.clear(os.getpid())
-        for sig, eski in onceki.items():
-            signal.signal(sig, eski)
+        for sig, previous in previous_handlers.items():
+            signal.signal(sig, previous)
 
 
 def _chapter_progress(chapter: book.Chapter, total: int, skipped: bool) -> None:
-    etiket = chapter.title or _("Bölüm {number}").format(number=chapter.number)
-    durum = " " + _("(atlandı)") if skipped else ""
+    label = chapter.title or _("Bölüm {number}").format(number=chapter.number)
+    state = " " + _("(atlandı)") if skipped else ""
     typer.echo(
         _("Bölüm {number}/{total}: {title}{state}").format(
-            number=chapter.number, total=total, title=etiket[:60], state=durum
+            number=chapter.number, total=total, title=label[:60], state=state
         )
     )
 
@@ -942,18 +949,18 @@ def _print_chapters(source: Path, level: int) -> None:
         typer.secho(_("Bölüm bulunamadı."), fg=typer.colors.YELLOW)
         return
 
-    toplam = f"{sum(len(chapter.text) for chapter in chapters):,}".replace(",", ".")
+    total = f"{sum(len(chapter.text) for chapter in chapters):,}".replace(",", ".")
     typer.secho(
         _("{count} bölüm, toplam {chars} karakter.").format(
-            count=len(chapters), chars=toplam
+            count=len(chapters), chars=total
         ),
         fg=typer.colors.CYAN,
     )
     for chapter in chapters:
-        ad = chapter.filename(len(chapters))
+        name = chapter.filename(len(chapters))
         typer.echo(
             "  " + _("{name:<48} {chars:>8} karakter").format(
-                name=ad, chars=len(chapter.text)
+                name=name, chars=len(chapter.text)
             )
         )
 
@@ -962,12 +969,12 @@ def _recent_outputs(config: Config) -> list[Path]:
     """Çıktı dizinindeki ses dosyalarını en yeniden eskiye sıralar."""
     if not config.output_dir.is_dir():
         return []
-    sesler = [
+    audio_files = [
         path
         for path in config.output_dir.iterdir()
         if path.is_file() and path.suffix.lower() in (".mp3", ".wav")
     ]
-    return sorted(sesler, key=lambda p: p.stat().st_mtime, reverse=True)
+    return sorted(audio_files, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
 def _progress(done: int, total: int) -> None:

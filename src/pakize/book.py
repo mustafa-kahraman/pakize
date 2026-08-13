@@ -62,8 +62,8 @@ class Chapter:
         Numara toplam bölüm sayısına göre sıfırla doldurulur; böylece dosyalar
         alfabetik sıralamada da doğru sırada durur.
         """
-        genislik = len(str(total))
-        return f"{self.number:0{genislik}d}-{slugify(self.title)}{suffix}"
+        width = len(str(total))
+        return f"{self.number:0{width}d}-{slugify(self.title)}{suffix}"
 
 
 @dataclass(frozen=True)
@@ -135,9 +135,9 @@ def split_chapters(
     satırlara saygı duyularak yaklaşık eşit parçalara bölünür — aksi hâlde
     tüm kitap tek bir devasa dosyaya düşerdi.
     """
-    bolumler = _split_by_headings(text, level)
-    if bolumler:
-        return bolumler
+    chapters = _split_by_headings(text, level)
+    if chapters:
+        return chapters
     return _split_by_size(text)
 
 
@@ -159,109 +159,109 @@ def narrate(
         raise BookError(_("Kitapta seslendirilecek metin bulunamadı"))
 
     destination.mkdir(parents=True, exist_ok=True)
-    uretilen: list[Path] = []
-    atlanan = 0
+    produced: list[Path] = []
+    skipped = 0
 
     for chapter in chapters:
-        hedef = destination / chapter.filename(len(chapters))
-        zaten_var = not force and hedef.is_file() and hedef.stat().st_size > 0
+        target = destination / chapter.filename(len(chapters))
+        already_exists = not force and target.is_file() and target.stat().st_size > 0
 
         if progress is not None:
-            progress(chapter, len(chapters), zaten_var)
+            progress(chapter, len(chapters), already_exists)
 
-        if not zaten_var:
-            _narrate_chapter(chapter, hedef, config)
+        if not already_exists:
+            _narrate_chapter(chapter, target, config)
 
-        uretilen.append(hedef)
-        atlanan += int(zaten_var)
+        produced.append(target)
+        skipped += int(already_exists)
 
-    playlist = _write_playlist(destination, chapters, uretilen)
+    playlist = _write_playlist(destination, chapters, produced)
     return BookResult(
         directory=destination,
-        chapters=uretilen,
+        chapters=produced,
         playlist=playlist,
-        skipped=atlanan,
+        skipped=skipped,
     )
 
 
 def slugify(title: str) -> str:
     """Başlığı dosya adına uygun, ASCII bir kısa ada çevirir."""
-    ascii_hali = unicodedata.normalize("NFKD", title.translate(_TURKISH_MAP))
-    ascii_hali = ascii_hali.encode("ascii", "ignore").decode("ascii").lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", ascii_hali).strip("-")
+    ascii_form = unicodedata.normalize("NFKD", title.translate(_TURKISH_MAP))
+    ascii_form = ascii_form.encode("ascii", "ignore").decode("ascii").lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_form).strip("-")
     return (slug[:60].rstrip("-")) or "bolum"
 
 
 def _narrate_chapter(chapter: Chapter, destination: Path, config: Config) -> SpeechResult:
     """Tek bir bölümü seslendirir; başlık da metnin başında okunur."""
-    metin = f"{chapter.title}\n\n{chapter.text}" if chapter.title else chapter.text
-    return synthesize(metin, destination, config)
+    text = f"{chapter.title}\n\n{chapter.text}" if chapter.title else chapter.text
+    return synthesize(text, destination, config)
 
 
 def _split_by_headings(text: str, level: int) -> list[Chapter]:
     """Başlıklara göre böler; hiç uygun başlık yoksa boş liste döner."""
-    satirlar = text.replace("\r\n", "\n").split("\n")
-    sinirlar: list[tuple[int, str]] = []
+    lines = text.replace("\r\n", "\n").split("\n")
+    bounds: list[tuple[int, str]] = []
 
-    icerideyiz_kod = False
-    for index, satir in enumerate(satirlar):
+    in_code_block = False
+    for index, line in enumerate(lines):
         # Kod bloğu içindeki `#` satırları başlık değildir.
-        if satir.lstrip().startswith(("```", "~~~")):
-            icerideyiz_kod = not icerideyiz_kod
+        if line.lstrip().startswith(("```", "~~~")):
+            in_code_block = not in_code_block
             continue
-        if icerideyiz_kod:
+        if in_code_block:
             continue
-        match = _HEADING_RE.match(satir)
+        match = _HEADING_RE.match(line)
         if match and len(match.group("hashes")) <= level:
-            sinirlar.append((index, match.group("title")))
+            bounds.append((index, match.group("title")))
 
-    if not sinirlar:
+    if not bounds:
         return []
 
-    bolumler: list[Chapter] = []
-    for sira, (baslangic, baslik) in enumerate(sinirlar):
-        bitis = sinirlar[sira + 1][0] if sira + 1 < len(sinirlar) else len(satirlar)
-        govde = "\n".join(satirlar[baslangic + 1 : bitis]).strip()
-        if not govde:
+    chapters: list[Chapter] = []
+    for number, (start, heading) in enumerate(bounds):
+        end = bounds[number + 1][0] if number + 1 < len(bounds) else len(lines)
+        body = "\n".join(lines[start + 1 : end]).strip()
+        if not body:
             continue
-        bolumler.append(
-            Chapter(number=len(bolumler) + 1, title=baslik.strip(), text=govde)
+        chapters.append(
+            Chapter(number=len(chapters) + 1, title=heading.strip(), text=body)
         )
 
     # İlk başlıktan önceki metin (ön söz, kapak) kaybolmasın.
-    onsoz = "\n".join(satirlar[: sinirlar[0][0]]).strip()
-    if onsoz:
-        bolumler = [Chapter(number=1, title="", text=onsoz)] + [
-            Chapter(number=b.number + 1, title=b.title, text=b.text) for b in bolumler
+    preface = "\n".join(lines[: bounds[0][0]]).strip()
+    if preface:
+        chapters = [Chapter(number=1, title="", text=preface)] + [
+            Chapter(number=b.number + 1, title=b.title, text=b.text) for b in chapters
         ]
 
-    return bolumler
+    return chapters
 
 
 def _split_by_size(text: str) -> list[Chapter]:
     """Başlıksız metni, paragraf sınırlarına saygı duyarak parçalara böler."""
-    paragraflar = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
-    if not paragraflar:
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if not paragraphs:
         return []
 
-    bolumler: list[Chapter] = []
-    tampon: list[str] = []
-    uzunluk = 0
+    chapters: list[Chapter] = []
+    buffer: list[str] = []
+    length = 0
 
-    for paragraf in paragraflar:
-        tampon.append(paragraf)
-        uzunluk += len(paragraf)
-        if uzunluk >= FALLBACK_CHAPTER_CHARS:
-            bolumler.append(_bolum_yap(len(bolumler) + 1, tampon))
-            tampon, uzunluk = [], 0
+    for paragraph in paragraphs:
+        buffer.append(paragraph)
+        length += len(paragraph)
+        if length >= FALLBACK_CHAPTER_CHARS:
+            chapters.append(_split_evenly(len(chapters) + 1, buffer))
+            buffer, length = [], 0
 
-    if tampon:
-        bolumler.append(_bolum_yap(len(bolumler) + 1, tampon))
-    return bolumler
+    if buffer:
+        chapters.append(_split_evenly(len(chapters) + 1, buffer))
+    return chapters
 
 
-def _bolum_yap(number: int, paragraflar: list[str]) -> Chapter:
-    return Chapter(number=number, title=f"Bölüm {number}", text="\n\n".join(paragraflar))
+def _split_evenly(number: int, paragraphs: list[str]) -> Chapter:
+    return Chapter(number=number, title=f"Bölüm {number}", text="\n\n".join(paragraphs))
 
 
 def _write_playlist(
@@ -269,9 +269,9 @@ def _write_playlist(
 ) -> Path:
     """Bölümleri sırayla çalan bir M3U oynatma listesi yazar."""
     playlist = directory / f"{directory.name}.m3u"
-    satirlar = ["#EXTM3U"]
+    lines = ["#EXTM3U"]
     for chapter, path in zip(chapters, files):
-        satirlar.append(f"#EXTINF:-1,{chapter.title or f'Bölüm {chapter.number}'}")
-        satirlar.append(path.name)
-    playlist.write_text("\n".join(satirlar) + "\n", encoding="utf-8")
+        lines.append(f"#EXTINF:-1,{chapter.title or f'Bölüm {chapter.number}'}")
+        lines.append(path.name)
+    playlist.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return playlist

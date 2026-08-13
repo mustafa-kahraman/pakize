@@ -102,9 +102,9 @@ def _available_readers() -> list[_Reader]:
     kurulu olabilir, ama orada doğru cevabı veren `pbpaste`'tir.
     """
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    kurulu = [reader for reader in _READERS if shutil.which(reader.binary)]
+    installed = [reader for reader in _READERS if shutil.which(reader.binary)]
     return sorted(
-        kurulu, key=lambda reader: (not reader.native, reader.session != session)
+        installed, key=lambda reader: (not reader.native, reader.session != session)
     )
 
 
@@ -127,7 +127,7 @@ def _read_with(reader: _Reader) -> str:
     if result.returncode != 0:
         # Boş pano da hata koduyla döner; bunu içerik yokluğu sayarız.
         stderr = (result.stderr or "").strip()
-        if _bos_pano_hatasi(stderr):
+        if _is_empty_clipboard_error(stderr):
             return ""
         raise ClipboardError(
             stderr or _("çıkış kodu {code}").format(code=result.returncode)
@@ -136,7 +136,7 @@ def _read_with(reader: _Reader) -> str:
     return result.stdout or ""
 
 
-def _bos_pano_hatasi(stderr: str) -> bool:
+def _is_empty_clipboard_error(stderr: str) -> bool:
     """Araçların "pano boş" anlamına gelen hata metinlerini tanır."""
-    dusuk = stderr.lower()
-    return "target string not available" in dusuk or "no selection" in dusuk
+    lowered = stderr.lower()
+    return "target string not available" in lowered or "no selection" in lowered

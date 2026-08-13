@@ -126,12 +126,12 @@ def _announce(segment: Segment, lang: str) -> str:
     """
     if segment.type is SegmentType.CODE_BLOCK:
         name = _language_name(segment.language)
-        kalip = (
+        template = (
             "Burada {count} satırlık bir {language} kod bloğu var."
             if name
             else "Burada {count} satırlık bir kod bloğu var."
         )
-        return in_language(kalip, lang).format(
+        return in_language(template, lang).format(
             count=segment.line_count, language=name
         )
 

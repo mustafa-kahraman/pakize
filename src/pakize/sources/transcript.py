@@ -119,8 +119,8 @@ def _merge_consecutive(turns: list[Turn]) -> list[Turn]:
     merged: list[Turn] = []
     for turn in turns:
         if merged and merged[-1].role == turn.role:
-            birlesik = f"{merged[-1].text}\n\n{turn.text}"
-            merged[-1] = Turn(role=turn.role, text=birlesik)
+            combined_text = f"{merged[-1].text}\n\n{turn.text}"
+            merged[-1] = Turn(role=turn.role, text=combined_text)
             continue
         merged.append(turn)
     return merged
@@ -132,20 +132,20 @@ def collect(path: Path, last: int | None = 1, roles: Roles = Roles.ASSISTANT) ->
     `last` None ise konuşmanın tamamı alınır. Birden çok rol seçildiğinde
     araya kimin konuştuğunu belirten kısa bir ayraç konur.
     """
-    secilen = [turn for turn in read_turns(path) if roles.matches(turn.role)]
+    selected = [turn for turn in read_turns(path) if roles.matches(turn.role)]
     if last is not None:
         if last < 1:
             raise ValueError(_("last en az 1 olmalı"))
-        secilen = secilen[-last:]
+        selected = selected[-last:]
 
-    if not secilen:
+    if not selected:
         return ""
 
     if roles is not Roles.ALL:
-        return "\n\n".join(turn.text for turn in secilen)
+        return "\n\n".join(turn.text for turn in selected)
 
     return "\n\n".join(
-        f"{_ROLE_LABELS.get(turn.role, turn.role)}: {turn.text}" for turn in secilen
+        f"{_ROLE_LABELS.get(turn.role, turn.role)}: {turn.text}" for turn in selected
     )
 
 
@@ -186,12 +186,12 @@ def _extract_text(content: object, role: str) -> str:
         return ""
 
     # Araç çıktısı ve düşünme blokları konuşma değildir; yalnızca metin alınır.
-    parcalar = [
-        blok.get("text", "")
-        for blok in content
-        if isinstance(blok, dict) and blok.get("type") == "text"
+    pieces = [
+        block.get("text", "")
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "text"
     ]
-    return _clean("\n\n".join(parca for parca in parcalar if parca.strip()))
+    return _clean("\n\n".join(piece for piece in pieces if piece.strip()))
 
 
 def _clean(text: str) -> str:

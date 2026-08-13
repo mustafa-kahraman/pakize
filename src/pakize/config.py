@@ -224,22 +224,22 @@ def render_default_config() -> str:
     kaynağı oluşmaz; varsayılan değişirse üretilen dosya da değişir.
     """
     defaults = Config()
-    satirlar = [
+    lines = [
         _("# Pakize yapılandırması"),
         _("# 'pakize config --init' ile üretildi."),
         _("# Bu dosyayı silersen Pakize varsayılanlarla çalışmaya devam eder."),
         "",
     ]
 
-    for alan, aciklama in _FIELD_NOTES.items():
-        deger = getattr(defaults, alan)
-        satir = f"{alan} = {_toml_value(deger)}"
+    for field, description in _FIELD_NOTES.items():
+        value = getattr(defaults, field)
+        line = f"{field} = {_toml_value(value)}"
         # TOML'da boş değer yok; tanımsız ayarları örnek olarak yorumda bırakırız.
-        if deger is None:
-            satir = f"# {alan} = {_toml_value(_ORNEK_DEGERLER[alan])}"
-        satirlar.append(_yorumla(satir, _(aciklama)))
+        if value is None:
+            line = f"# {field} = {_toml_value(_EXAMPLE_VALUES[field])}"
+        lines.append(_with_comment(line, _(description)))
 
-    satirlar += [
+    lines += [
         "",
         "[policy]",
         _(
@@ -247,28 +247,28 @@ def render_default_config() -> str:
             '"skip" (atla)'
         ),
     ]
-    for segment_type, aciklama in _POLICY_NOTES.items():
+    for segment_type, description in _POLICY_NOTES.items():
         action = DEFAULT_POLICY[segment_type]
-        satir = f'{segment_type.value} = "{action.value}"'
-        satirlar.append(_yorumla(satir, _(aciklama)))
+        line = f'{segment_type.value} = "{action.value}"'
+        lines.append(_with_comment(line, _(description)))
 
-    return "\n".join(satirlar) + "\n"
-
-
-_YORUM_SUTUNU = 44
+    return "\n".join(lines) + "\n"
 
 
-def _yorumla(satir: str, aciklama: str) -> str:
+_COMMENT_COLUMN = 44
+
+
+def _with_comment(line: str, description: str) -> str:
     """Ayar satırının sağına, hizalı bir açıklama yorumu ekler.
 
     Satır hizalama sütununu aşarsa yorum yine de tek boşlukla ayrılır; aksi
     hâlde uzun değerlerde açıklama satıra yapışırdı.
     """
-    bosluk = max(_YORUM_SUTUNU - len(satir), 1)
-    return f"{satir}{' ' * bosluk}# {aciklama}"
+    padding = max(_COMMENT_COLUMN - len(line), 1)
+    return f"{line}{' ' * padding}# {description}"
 
 
-_ORNEK_DEGERLER: dict[str, object] = {
+_EXAMPLE_VALUES: dict[str, object] = {
     "translate_to": "tr",
     "piper_model": "~/.local/share/piper/tr_TR-dfki-medium.onnx",
     "piper_binary": "~/.local/bin/piper",
@@ -301,7 +301,7 @@ def set_config_value(key: str, raw_value: str, path: Path | None = None) -> str:
     rendered = _toml_value(value)
     line = f"{key} = {rendered}"
     if key in _FIELD_NOTES:
-        line = _yorumla(line, _(_FIELD_NOTES[key]))
+        line = _with_comment(line, _(_FIELD_NOTES[key]))
 
     target = path or config_path()
     if target.is_file():
@@ -383,8 +383,8 @@ def _toml_value(value: object) -> str:
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return str(value)
-    kacisli = str(value).replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{kacisli}"'
+    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def _merge_policy(

@@ -70,10 +70,10 @@ class GoogleTranslator:
 
     def translate_lines(self, lines: Sequence[str]) -> list[str]:
         """Satırları sırayı ve sayıyı koruyarak çevirir."""
-        sonuc: list[str] = []
+        result: list[str] = []
         for batch in _batch(lines, MAX_REQUEST_CHARS):
-            sonuc.extend(self._translate_batch(batch))
-        return sonuc
+            result.extend(self._translate_batch(batch))
+        return result
 
     def _translate_batch(self, batch: list[str]) -> list[str]:
         """Bir grup satırı tek istekte çevirir.
@@ -86,11 +86,11 @@ class GoogleTranslator:
         if len(batch) == 1:
             return [self._request(batch[0])]
 
-        cevrilen = self._request("\n".join(batch))
-        satirlar = cevrilen.split("\n")
-        if len(satirlar) == len(batch):
-            return satirlar
-        return [self._request(satir) for satir in batch]
+        translated = self._request("\n".join(batch))
+        lines = translated.split("\n")
+        if len(lines) == len(batch):
+            return lines
+        return [self._request(line) for line in batch]
 
     def _request(self, text: str) -> str:
         """Tek bir metni çevirir; boş metinde ağa çıkmaz."""
@@ -112,9 +112,9 @@ class GoogleTranslator:
 
         data = self._fetch(request)
         try:
-            parcalar = data[0]
+            pieces = data[0]
             self.detected = data[2] if len(data) > 2 else None
-            return "".join(parca[0] for parca in parcalar if parca and parca[0])
+            return "".join(piece[0] for piece in pieces if piece and piece[0])
         except (IndexError, KeyError, TypeError) as exc:
             raise TranslationError(
                 _("Çeviri yanıtı anlaşılamadı: {error}").format(error=exc)
@@ -122,32 +122,32 @@ class GoogleTranslator:
 
     def _fetch(self, request: urllib.request.Request):
         """İsteği gönderir; hız sınırında artan gecikmeyle tekrar dener."""
-        son_hata: Exception | None = None
+        last_error: Exception | None = None
 
-        for deneme in range(MAX_ATTEMPTS):
-            if self.pause_seconds and deneme == 0:
+        for attempt in range(MAX_ATTEMPTS):
+            if self.pause_seconds and attempt == 0:
                 time.sleep(self.pause_seconds)
             try:
                 with urllib.request.urlopen(request, timeout=20) as response:
                     return json.load(response)
             except urllib.error.HTTPError as exc:
-                son_hata = exc
+                last_error = exc
                 if exc.code not in (429, 503):
                     raise TranslationError(
                         _("Çeviri servisi hata verdi (HTTP {code})").format(
                             code=exc.code
                         )
                     ) from exc
-                time.sleep(RETRY_BASE_SECONDS * (2**deneme))
+                time.sleep(RETRY_BASE_SECONDS * (2**attempt))
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-                son_hata = exc
-                time.sleep(RETRY_BASE_SECONDS * (2**deneme))
+                last_error = exc
+                time.sleep(RETRY_BASE_SECONDS * (2**attempt))
 
         raise TranslationError(
             _(
                 "Çeviri servisine ulaşılamadı. Ücretsiz uç geçici olarak "
                 "engellemiş olabilir; biraz sonra tekrar dene. ({error})"
-            ).format(error=son_hata)
+            ).format(error=last_error)
         )
 
 
@@ -159,42 +159,42 @@ def translate_segments(
     Kaynak dil zaten hedef dille aynıysa metin olduğu gibi bırakılır — kendi
     dilinde yazılmış bir metni gidip geri çevirmenin anlamı yok.
     """
-    hedefler = [
+    targets = [
         (index, segment)
         for index, segment in enumerate(segments)
         if segment.type in TRANSLATABLE and segment.text.strip()
     ]
-    if not hedefler:
+    if not targets:
         return segments
 
     # Satır sayısının korunabilmesi için her segment tek satıra indirgenir;
     # seslendirmede satır sonlarının zaten bir karşılığı yok.
-    satirlar = [" ".join(segment.text.split()) for _index, segment in hedefler]
-    cevrilen = translator.translate_lines(satirlar)
+    lines = [" ".join(segment.text.split()) for _index, segment in targets]
+    translated = translator.translate_lines(lines)
 
     if translator.detected and translator.detected == translator.target:
         return segments
 
-    sonuc = list(segments)
-    for (index, segment), yeni_metin in zip(hedefler, cevrilen):
-        sonuc[index] = replace(segment, text=yeni_metin)
-    return sonuc
+    result = list(segments)
+    for (index, segment), new_text in zip(targets, translated):
+        result[index] = replace(segment, text=new_text)
+    return result
 
 
 def _batch(lines: Sequence[str], max_chars: int) -> list[list[str]]:
     """Satırları, karakter sınırını aşmayan gruplara ayırır."""
-    gruplar: list[list[str]] = []
-    tampon: list[str] = []
-    uzunluk = 0
+    groups: list[list[str]] = []
+    buffer: list[str] = []
+    length = 0
 
     for line in lines:
         # +1: satırları birleştirirken araya girecek satır sonu.
-        if tampon and uzunluk + len(line) + 1 > max_chars:
-            gruplar.append(tampon)
-            tampon, uzunluk = [], 0
-        tampon.append(line)
-        uzunluk += len(line) + 1
+        if buffer and length + len(line) + 1 > max_chars:
+            groups.append(buffer)
+            buffer, length = [], 0
+        buffer.append(line)
+        length += len(line) + 1
 
-    if tampon:
-        gruplar.append(tampon)
-    return gruplar
+    if buffer:
+        groups.append(buffer)
+    return groups

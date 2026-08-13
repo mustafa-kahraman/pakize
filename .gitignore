@@ -21,3 +21,7 @@ dist/
 
 # Sosyal medya taslakları — depoya değil, kişisel kullanıma ait
 paylasim/
+
+# Piper ses modelleri — onlarca megabayt; depoya değil, dışarıda dursunlar
+*.onnx
+*.onnx.json

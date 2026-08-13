@@ -61,7 +61,7 @@ def running_pids() -> list[int]:
     if not directory.is_dir():
         return []
 
-    yasayanlar: list[tuple[float, int]] = []
+    alive: list[tuple[float, int]] = []
     for entry in directory.iterdir():
         if not entry.name.isdigit():
             continue
@@ -69,9 +69,9 @@ def running_pids() -> list[int]:
         if not _is_pakize(pid):
             entry.unlink(missing_ok=True)
             continue
-        yasayanlar.append((entry.stat().st_mtime, pid))
+        alive.append((entry.stat().st_mtime, pid))
 
-    return [pid for _, pid in sorted(yasayanlar, reverse=True)]
+    return [pid for _, pid in sorted(alive, reverse=True)]
 
 
 def running_pid() -> int | None:
@@ -121,14 +121,14 @@ def stop(pid: int) -> bool:
     return True
 
 
-def _apply(pid: int, eylem: str) -> bool:
+def _apply(pid: int, action: str) -> bool:
     """Çalma alt süreçlerinin tümüne bir eylemi uygular; hiçbiri yoksa False."""
-    uygulandi = False
+    applied = False
     for player in _players(pid):
         # Kısa devre yapılmamalı: biri başarısız olsa da diğerlerine uygulanır.
-        if _try(player, eylem):
-            uygulandi = True
-    return uygulandi
+        if _try(player, action):
+            applied = True
+    return applied
 
 
 def _terminate_players(pid: int) -> None:
@@ -143,7 +143,7 @@ def _terminate_players(pid: int) -> None:
         _try(player, "terminate")
 
 
-def _try(process: psutil.Process, eylem: str) -> bool:
+def _try(process: psutil.Process, action: str) -> bool:
     """Süreç üzerinde bir eylemi dener; uygulanamadıysa False döner.
 
     Süreç iki okuma arasında ölmüş olabilir; bu olağan bir yarış, hata değil.
@@ -151,7 +151,7 @@ def _try(process: psutil.Process, eylem: str) -> bool:
     hata yutma tek tek eylemlerin çevresindedir.
     """
     try:
-        getattr(process, eylem)()
+        getattr(process, action)()
     except (psutil.Error, OSError):
         return False
     return True
