@@ -7,6 +7,7 @@ unutmak testte yakalanır, kullanıcıda değil.
 
 import ast
 from pathlib import Path
+from dataclasses import replace
 from string import Formatter
 
 import pytest
@@ -34,7 +35,7 @@ def temiz_dil_ortami(monkeypatch):
 
 
 def _wrapped_literals() -> set[str]:
-    """Kaynak ağacındaki `_("...")` çağrılarının düz metin argümanları."""
+    """Kaynak ağacındaki `_("...")` ve `in_language("...", ...)` metinleri."""
     keys: set[str] = set()
     for path in SRC.rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -42,7 +43,7 @@ def _wrapped_literals() -> set[str]:
             if (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
-                and node.func.id == "_"
+                and node.func.id in ("_", "in_language")
                 and node.args
                 and isinstance(node.args[0], ast.Constant)
                 and isinstance(node.args[0].value, str)
@@ -54,6 +55,46 @@ def _wrapped_literals() -> set[str]:
 def test_katalog_kaynaktaki_tum_metinleri_kapsar():
     eksik = _wrapped_literals() - set(i18n._EN)
     assert not eksik, f"İngilizce karşılığı olmayan metinler: {sorted(eksik)}"
+
+
+def test_anons_sesin_diline_uyar():
+    """Anons, arayüz dilinden değil `voice` alanının dilinden türer."""
+    from pakize.config import Config
+    from pakize.models import Action, Segment, SegmentType
+    from pakize.parsing import apply_policy
+
+    segment = Segment(type=SegmentType.CODE_BLOCK, text="x = 1", language="python")
+    segment = replace(segment, line_count=12)
+    politika = {**Config().policy, SegmentType.CODE_BLOCK: Action.ANNOUNCE}
+
+    i18n.set_language("tr")  # arayüz Türkçe olsa bile ses ne diyorsa o
+    ingilizce, _ = apply_policy(
+        [segment], replace(Config(), voice="en-US-AndrewNeural", policy=politika)
+    )
+    turkce, _ = apply_policy(
+        [segment], replace(Config(), voice="tr-TR-AhmetNeural", policy=politika)
+    )
+
+    assert ingilizce == ["There is a 12-line Python code block here."]
+    assert turkce == ["Burada 12 satırlık bir Python kod bloğu var."]
+
+
+def test_katalogda_olmayan_ses_dili_ingilizceye_duser():
+    """Almanca ses: katalogda de yok, Türkçe cümle yerine İngilizce okunur."""
+    from pakize.config import Config
+    from pakize.models import Action, Segment, SegmentType
+    from pakize.parsing import apply_policy
+
+    segment = replace(
+        Segment(type=SegmentType.TABLE, text="| a |"), line_count=3
+    )
+    politika = {**Config().policy, SegmentType.TABLE: Action.ANNOUNCE}
+
+    sonuc, _ = apply_policy(
+        [segment], replace(Config(), voice="de-AT-IngridNeural", policy=politika)
+    )
+
+    assert sonuc == ["There is a 3-line table here."]
 
 
 def test_katalog_sozluk_uzerinden_gecen_metinleri_kapsar():

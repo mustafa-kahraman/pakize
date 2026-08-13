@@ -664,6 +664,11 @@ Böylece kodun kendisi okunmaz ama bağlam kaybolmaz. `skip` seçersen blok
 tamamen atlanır. Satır içi `kod` ve bağlantılar cümlenin akışını bozmadan,
 yerinde dönüştürülür.
 
+Anons cümlesi **seçtiğin sesin diline** uyar; CLI mesajlarının diline değil.
+`en-US-AndrewNeural` seçtiysen aynı yerde "There is a 12-line Python code block
+here." duyarsın. Katalogda karşılığı olmayan diller (Almanca, Fransızca...)
+İngilizce cümleye düşer — Türkçe bir cümlenin Almanca sesle okunmasından iyidir.
+
 ### Dosya yolları
 
 `file_path` tipinde `read`, yolun tamamını değil **yalnızca dosya adını** okumak

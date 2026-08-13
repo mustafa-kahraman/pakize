@@ -81,10 +81,31 @@ def _configured_language() -> str | None:
 
 
 def _(text: str) -> str:
-    """Metni etkin dile çevirir; kaynak dil Türkçedir."""
-    if language() == "tr":
+    """Metni etkin arayüz diline çevirir; kaynak dil Türkçedir."""
+    return in_language(text, language())
+
+
+def in_language(text: str, lang: str) -> str:
+    """Metni belirtilen dile çevirir.
+
+    Arayüz dilinden bağımsızdır: seslendirilen anonslar, CLI'ın diline değil
+    okunan sesin diline uyar. Katalogda karşılığı olmayan diller İngilizceye
+    düşer — Türkçe bir cümlenin Almanca sesle okunması, İngilizcesinden kötüdür.
+    """
+    if lang == "tr":
         return text
     return _EN.get(text, text)
+
+
+def voice_language(voice: str) -> str:
+    """Ses adının dil kodunu döner: "de-AT-IngridNeural" → "de".
+
+    Ses adı zaten dili taşıdığı için ayrı bir "dil" ayarı tutmayız; tek
+    doğruluk kaynağı `voice` alanıdır.
+    """
+    if not voice:
+        return "tr"
+    return voice.split("-")[0].lower()
 
 
 _EN: dict[str, str] = {
@@ -316,6 +337,18 @@ _EN: dict[str, str] = {
     "başlıklar": "headings",
     "liste maddeleri": "list items",
     "alıntı blokları": "quote blocks",
+    # --- seslendirilen anonslar (arayüz diline değil, sesin diline uyar) ---
+    "Burada {count} satırlık bir {language} kod bloğu var.":
+        "There is a {count}-line {language} code block here.",
+    "Burada {count} satırlık bir kod bloğu var.":
+        "There is a {count}-line code block here.",
+    "Burada {count} satırlık bir tablo var.":
+        "There is a {count}-line table here.",
+    "Burada okunmayan bir bölüm var.":
+        "There is a section here that was not read.",
+    "bir kod parçası": "a code snippet",
+    "bir bağlantı": "a link",
+    "bir dosya yolu": "a file path",
     # --- segment etiketleri (Okunmadı: satırı) ---
     "kod bloğu": "code block",
     "tablo": "table",

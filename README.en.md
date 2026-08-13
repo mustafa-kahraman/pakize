@@ -679,6 +679,12 @@ That way the code itself isn't read out but the context isn't lost either. With
 `skip` the block is dropped entirely. Inline `code` and links are converted in
 place, without breaking the flow of the sentence.
 
+The announcement follows **the language of the voice you picked**, not the
+language of the CLI messages. With `tr-TR-EmelNeural` the same spot says "Burada
+12 satırlık bir Python kod bloğu var." Languages with no entry in the catalogue
+(German, French, …) fall back to English — better than a Turkish sentence read
+by a German voice.
+
 ### File paths
 
 `read` on the `file_path` type means reading **only the file name**, not the

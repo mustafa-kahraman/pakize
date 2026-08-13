@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 
 from ..config import Config
+from ..i18n import in_language, voice_language
 from ..models import Action, Segment, SegmentType
 from .text import normalize_decimals
 
@@ -73,6 +74,7 @@ _INLINE_ANNOUNCEMENTS = {
     SegmentType.URL: "bir bağlantı",
     SegmentType.FILE_PATH: "bir dosya yolu",
 }
+"""Satır içi anonsların Türkçe kaynak metinleri; `in_language` ile çevrilir."""
 
 
 def apply_policy(
@@ -83,6 +85,10 @@ def apply_policy(
     Dönen listedeki her eleman kendi başına anlamlı bir söyleyiştir; hangi
     tipten kaç segmentin atlandığı ikinci değerde raporlanır.
     """
+    # Anonslar seslendirilecek metnin parçası; bu yüzden arayüz diline değil
+    # okunan sesin diline uyarlar.
+    lang = voice_language(config.voice)
+
     utterances: list[str] = []
     skipped: dict[SegmentType, int] = {}
 
@@ -95,10 +101,10 @@ def apply_policy(
 
         if action is Action.ANNOUNCE:
             _tally(skipped, segment.type, 1)
-            utterances.append(_announce(segment))
+            utterances.append(_announce(segment, lang))
             continue
 
-        spoken, inline_skipped = _render(segment, config)
+        spoken, inline_skipped = _render(segment, config, lang)
         for segment_type, count in inline_skipped.items():
             _tally(skipped, segment_type, count)
         if spoken:
@@ -112,17 +118,29 @@ def _tally(counter: dict[SegmentType, int], key: SegmentType, amount: int) -> No
         counter[key] = counter.get(key, 0) + amount
 
 
-def _announce(segment: Segment) -> str:
-    """Okunmayan bir bloğun yerine geçecek kısa Türkçe anons cümlesi."""
+def _announce(segment: Segment, lang: str) -> str:
+    """Okunmayan bir bloğun yerine geçecek kısa anons cümlesi.
+
+    Cümlenin tamamı çevrilir; parça parça birleştirilseydi dillerin sözcük
+    sırası bozulurdu ("Python kod bloğu" → "code block Python" gibi).
+    """
     if segment.type is SegmentType.CODE_BLOCK:
-        language = _language_name(segment.language)
-        subject = f"{language} kod bloğu" if language else "kod bloğu"
-        return f"Burada {segment.line_count} satırlık bir {subject} var."
+        name = _language_name(segment.language)
+        kalip = (
+            "Burada {count} satırlık bir {language} kod bloğu var."
+            if name
+            else "Burada {count} satırlık bir kod bloğu var."
+        )
+        return in_language(kalip, lang).format(
+            count=segment.line_count, language=name
+        )
 
     if segment.type is SegmentType.TABLE:
-        return f"Burada {segment.line_count} satırlık bir tablo var."
+        return in_language(
+            "Burada {count} satırlık bir tablo var.", lang
+        ).format(count=segment.line_count)
 
-    return "Burada okunmayan bir bölüm var."
+    return in_language("Burada okunmayan bir bölüm var.", lang)
 
 
 def _language_name(language: str | None) -> str | None:
@@ -133,7 +151,7 @@ def _language_name(language: str | None) -> str | None:
 
 
 def _render(
-    segment: Segment, config: Config
+    segment: Segment, config: Config, lang: str
 ) -> tuple[str, dict[SegmentType, int]]:
     """Okunacak bir segmenti seslendirmeye hazır metne çevirir.
 
@@ -144,7 +162,7 @@ def _render(
         # Politika "oku" ise kodu ham hâliyle veririz; normalizasyon kodu bozar.
         return segment.text.strip(), {}
 
-    text, skipped = _normalize_inline(segment.text, config)
+    text, skipped = _normalize_inline(segment.text, config, lang)
     if not text:
         return "", skipped
 
@@ -158,7 +176,7 @@ def _render(
 
 
 def _normalize_inline(
-    text: str, config: Config
+    text: str, config: Config, lang: str
 ) -> tuple[str, dict[SegmentType, int]]:
     """Satır içi Markdown işaretlerini politikaya göre temizler/dönüştürür."""
     text = _MD_IMAGE_RE.sub(lambda m: m.group("alt"), text)
@@ -172,6 +190,7 @@ def _normalize_inline(
         config.policy.get(SegmentType.INLINE_CODE, Action.READ),
         SegmentType.INLINE_CODE,
         lambda m: m.group("code"),
+        lang,
     )
     _tally(skipped, SegmentType.INLINE_CODE, count)
 
@@ -181,6 +200,7 @@ def _normalize_inline(
         config.policy.get(SegmentType.URL, Action.SKIP),
         SegmentType.URL,
         lambda m: m.group(0).strip("<>"),
+        lang,
     )
     _tally(skipped, SegmentType.URL, count)
 
@@ -194,6 +214,7 @@ def _normalize_inline(
         config.policy.get(SegmentType.FILE_PATH, Action.READ),
         SegmentType.FILE_PATH,
         lambda m: m.group("name"),
+        lang,
     )
     _tally(skipped, SegmentType.FILE_PATH, count)
 
@@ -213,6 +234,7 @@ def _substitute_inline(
     action: Action,
     segment_type: SegmentType,
     read_value,
+    lang: str,
 ) -> tuple[str, int]:
     """Satır içi bir örüntüyü politikaya göre okur, anons eder veya siler.
 
@@ -222,7 +244,9 @@ def _substitute_inline(
         return pattern.sub(read_value, text), 0
 
     replacement = (
-        _INLINE_ANNOUNCEMENTS[segment_type] if action is Action.ANNOUNCE else ""
+        in_language(_INLINE_ANNOUNCEMENTS[segment_type], lang)
+        if action is Action.ANNOUNCE
+        else ""
     )
     result, count = pattern.subn(replacement, text)
     return result, count
