@@ -9,6 +9,7 @@ import ast
 from pathlib import Path
 from string import Formatter
 
+import pytest
 from typer.testing import CliRunner
 
 from pakize import cli, i18n
@@ -18,6 +19,18 @@ from pakize.config import _FIELD_NOTES, _POLICY_NOTES
 SRC = Path(__file__).resolve().parent.parent / "src" / "pakize"
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def temiz_dil_ortami(monkeypatch):
+    """Dil tespitini yalnızca testin kendi verdiği değişkenlere bağlar.
+
+    `LC_ALL` ve `LC_MESSAGES`, `LANG`'i ezer. Bunlar makineden makineye dolu
+    gelebildiği için (macOS koşucusunda `LC_ALL` doluydu) yalnızca `LANG` set
+    eden bir test, ortama göre farklı sonuç verirdi.
+    """
+    for name in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def _wrapped_literals() -> set[str]:
