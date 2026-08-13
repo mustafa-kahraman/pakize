@@ -1,4 +1,4 @@
-**English** · [Türkçe](README.md)
+**English** · [Türkçe](https://github.com/mustafa-kahraman/pakize/blob/main/README.md)
 
 # Pakize
 
@@ -807,7 +807,7 @@ uv run pytest
 
 Copyright (C) 2026 Mustafa Kahraman
 
-[AGPL-3.0-or-later](LICENSE) — use it, change it, distribute it; whoever
+[AGPL-3.0-or-later](https://github.com/mustafa-kahraman/pakize/blob/main/LICENSE) — use it, change it, distribute it; whoever
 distributes a modified version **or offers it as a network service** must
 release its source under the same license. Versions 0.3.0 and earlier were
 published under MIT and remain MIT; AGPL applies from this version on.
