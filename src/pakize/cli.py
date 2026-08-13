@@ -118,7 +118,7 @@ def speak(
     ),
 ) -> None:
     """Bir metni seslendirir."""
-    _ilk_kurulum_ipucu()
+    _first_run_hint()
     try:
         text = _read_source(
             source,
@@ -225,7 +225,7 @@ def narrate_book(
     Var olan bölümler atlanır; yarıda kalan iş aynı komutla kaldığı yerden
     devam eder.
     """
-    _ilk_kurulum_ipucu()
+    _first_run_hint()
     config = _resolved_config(
         voice=voice, rate=rate, engine=engine, translate_to=translate
     )
@@ -365,35 +365,35 @@ def voices(
     # Bayrak verilmediğinde tam döküm yerine özet: aktif sesin dili öne çıkar,
     # kalan 70+ dil tek satırlık başlıklarla listelenir; 300+ satır dökülmez.
     all_voices = asyncio.run(EdgeEngine.list_voices(None))
-    aktif = load_config().voice
-    dil_kodu = aktif.split("-")[0].lower()
-    kendi_dili = [
-        v for v in all_voices if v["Locale"].lower().startswith(dil_kodu + "-")
+    active = load_config().voice
+    lang_code = active.split("-")[0].lower()
+    featured = [
+        v for v in all_voices if v["Locale"].lower().startswith(lang_code + "-")
     ]
-    digerleri = [
-        v for v in all_voices if not v["Locale"].lower().startswith(dil_kodu + "-")
+    others = [
+        v for v in all_voices if not v["Locale"].lower().startswith(lang_code + "-")
     ]
 
-    if kendi_dili:
-        ilk = kendi_dili[0]
-        dil_adi = ilk.get("LocaleName", ilk["Locale"]).split(" (")[0]
-        typer.secho(f"── {dil_adi} (aktif ses: {aktif}) ──", bold=True)
-        _print_voices(kendi_dili, aktif=aktif)
+    if featured:
+        first = featured[0]
+        language_name = first.get("LocaleName", first["Locale"]).split(" (")[0]
+        typer.secho(f"── {language_name} (aktif ses: {active}) ──", bold=True)
+        _print_voices(featured, active=active)
         typer.echo("")
 
     typer.secho("── Diğer diller (ayrıntı için: pakize voices -l de) ──", bold=True)
-    for kod, ad, adet in _language_summary(digerleri):
-        typer.echo(f"{kod:<8} {ad:<32} {adet} ses")
+    for code, name, count in _language_summary(others):
+        typer.echo(f"{code:<8} {name:<32} {count} ses")
 
     typer.echo("")
     typer.echo("Ses seçimi için sihirbaz: pakize setup")
 
 
-def _print_voices(entries: list[dict], aktif: str | None = None) -> None:
+def _print_voices(entries: list[dict], active: str | None = None) -> None:
     for entry in entries:
-        isaret = "  ← aktif" if entry["ShortName"] == aktif else ""
+        marker = "  ← aktif" if entry["ShortName"] == active else ""
         typer.echo(
-            f"{entry['ShortName']:<34} {entry['Gender']:<8} {entry['Locale']}{isaret}"
+            f"{entry['ShortName']:<34} {entry['Gender']:<8} {entry['Locale']}{marker}"
         )
 
 
@@ -403,16 +403,16 @@ def _language_summary(entries: list[dict]) -> list[tuple[str, str, int]]:
     Dil adı servisin `LocaleName` alanından gelir ("German (Austria)" → "German");
     elle tutulan ikinci bir dil sözlüğü olmasın diye ülke kısmı atılır.
     """
-    gruplar: dict[str, list[dict]] = {}
+    groups: dict[str, list[dict]] = {}
     for entry in entries:
-        gruplar.setdefault(entry["Locale"].split("-")[0], []).append(entry)
+        groups.setdefault(entry["Locale"].split("-")[0], []).append(entry)
 
-    ozet = []
-    for kod in sorted(gruplar):
-        ilk = gruplar[kod][0]
-        ad = ilk.get("LocaleName", ilk["Locale"]).split(" (")[0]
-        ozet.append((kod, ad, len(gruplar[kod])))
-    return ozet
+    summary = []
+    for code in sorted(groups):
+        first = groups[code][0]
+        name = first.get("LocaleName", first["Locale"]).split(" (")[0]
+        summary.append((code, name, len(groups[code])))
+    return summary
 
 
 @app.command()
@@ -426,50 +426,52 @@ def setup() -> None:
         typer.secho(f"Ses listesi alınamadı: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from None
 
-    diller = {kod: (ad, adet) for kod, ad, adet in _language_summary(all_voices)}
+    languages = {
+        code: (name, count) for code, name, count in _language_summary(all_voices)
+    }
     typer.secho("Diller:", bold=True)
-    for kod, (ad, adet) in diller.items():
-        typer.echo(f"  {kod:<8} {ad:<32} {adet} ses")
+    for code, (name, count) in languages.items():
+        typer.echo(f"  {code:<8} {name:<32} {count} ses")
 
-    dil = typer.prompt("\nDil kodu", default="tr").strip().lower()
-    while dil not in diller:
-        typer.secho(f"Tanınmayan dil kodu: {dil!r}", fg=typer.colors.YELLOW)
-        dil = typer.prompt("Dil kodu", default="tr").strip().lower()
+    lang = typer.prompt("\nDil kodu", default="tr").strip().lower()
+    while lang not in languages:
+        typer.secho(f"Tanınmayan dil kodu: {lang!r}", fg=typer.colors.YELLOW)
+        lang = typer.prompt("Dil kodu", default="tr").strip().lower()
 
-    sesler = [
-        v for v in all_voices if v["Locale"].lower().startswith(dil + "-")
+    candidates = [
+        v for v in all_voices if v["Locale"].lower().startswith(lang + "-")
     ]
     typer.echo("")
-    for sira, entry in enumerate(sesler, start=1):
-        typer.echo(f" {sira:>2}) {entry['ShortName']:<34} {entry['Gender']}")
+    for number, entry in enumerate(candidates, start=1):
+        typer.echo(f" {number:>2}) {entry['ShortName']:<34} {entry['Gender']}")
 
     typer.echo("\nNumara: örneği dinle • s+numara: seç (örn. s2) • q: çık")
     while True:
-        secim = typer.prompt(">").strip().lower()
-        if secim == "q":
+        choice = typer.prompt(">").strip().lower()
+        if choice == "q":
             typer.echo("Bir şey yazılmadı.")
             return
 
-        sec = secim.startswith("s")
+        selecting = choice.startswith("s")
         try:
-            sira = int(secim[1:] if sec else secim)
-            ses = sesler[sira - 1]["ShortName"]
+            number = int(choice[1:] if selecting else choice)
+            voice_name = candidates[number - 1]["ShortName"]
         except (ValueError, IndexError):
-            typer.secho(f"Geçersiz seçim: {secim!r}", fg=typer.colors.YELLOW)
+            typer.secho(f"Geçersiz seçim: {choice!r}", fg=typer.colors.YELLOW)
             continue
 
-        if not sec:
-            _play_sample(ses, dil)
+        if not selecting:
+            _play_sample(voice_name, lang)
             continue
 
         path = config_path()
-        yazilan = set_config_value("voice", ses, path)
-        typer.secho(f"Yazıldı: voice = {yazilan}", fg=typer.colors.GREEN)
+        written = set_config_value("voice", voice_name, path)
+        typer.secho(f"Yazıldı: voice = {written}", fg=typer.colors.GREEN)
         typer.echo(f"Config dosyası: {path}")
-        if dil != "tr":
+        if lang != "tr":
             typer.echo(
                 "Başka dildeki metinleri bu dile çevirtmek istersen: "
-                f"pakize config set translate_to {dil}"
+                f"pakize config set translate_to {lang}"
             )
         return
 
@@ -484,23 +486,23 @@ _SAMPLE_TEXT_EN = (
 )
 
 
-def _sample_text(dil: str) -> str:
+def _sample_text(lang: str) -> str:
     """Örnek cümleyi hedef dilde üretir.
 
     75 dillik elle çeviri sözlüğü tutmamak için mevcut çeviri katmanı
     kullanılır; servis çalışmazsa İngilizce yedek cümleye düşülür.
     """
-    if dil == "tr":
+    if lang == "tr":
         return _SAMPLE_TEXT_TR
-    if dil == "en":
+    if lang == "en":
         return _SAMPLE_TEXT_EN
     try:
-        return GoogleTranslator(target=dil).translate_lines([_SAMPLE_TEXT_TR])[0]
+        return GoogleTranslator(target=lang).translate_lines([_SAMPLE_TEXT_TR])[0]
     except TranslationError:
         return _SAMPLE_TEXT_EN
 
 
-def _play_sample(ses: str, dil: str) -> None:
+def _play_sample(voice_name: str, lang: str) -> None:
     """Seçilen sesle kısa bir örnek üretip çalar.
 
     Örnek dosya kalıcı çıktı dizinine değil geçici bir klasöre yazılır; yoksa
@@ -511,14 +513,14 @@ def _play_sample(ses: str, dil: str) -> None:
 
     typer.echo("Örnek hazırlanıyor...")
     with tempfile.TemporaryDirectory(prefix="pakize-ornek-") as tmp:
-        hedef = Path(tmp) / "ornek.mp3"
-        config = replace(load_config(), voice=ses)
+        target = Path(tmp) / "ornek.mp3"
+        config = replace(load_config(), voice=voice_name)
         try:
-            asyncio.run(EdgeEngine(config).synthesize(_sample_text(dil), hedef))
+            asyncio.run(EdgeEngine(config).synthesize(_sample_text(lang), target))
         except EngineError as exc:
             typer.secho(f"Örnek üretilemedi: {exc}", fg=typer.colors.YELLOW, err=True)
             return
-        audio.play(hedef)
+        audio.play(target)
 
 
 config_app = typer.Typer(invoke_without_command=True)
@@ -595,12 +597,12 @@ def set_setting(
 
     path = config_path()
     try:
-        yazilan = set_config_value(key, value, path)
+        written = set_config_value(key, value, path)
     except ValueError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from None
 
-    typer.secho(f"Yazıldı: {key} = {yazilan}", fg=typer.colors.GREEN)
+    typer.secho(f"Yazıldı: {key} = {written}", fg=typer.colors.GREEN)
     typer.echo(f"Config dosyası: {path}")
 
 
@@ -626,13 +628,13 @@ def _validate_voice(name: str) -> None:
         return
 
     typer.secho(f"Ses bulunamadı: {name!r}", fg=typer.colors.RED, err=True)
-    benzerler = [
+    similar = [
         entry["ShortName"]
         for entry in found
         if entry["ShortName"].lower().startswith(name.lower()[:5])
     ]
-    if benzerler:
-        typer.echo("Benzer adlar: " + ", ".join(benzerler[:5]), err=True)
+    if similar:
+        typer.echo("Benzer adlar: " + ", ".join(similar[:5]), err=True)
     typer.echo("Tüm liste için: pakize voices -l all", err=True)
     raise typer.Exit(code=1)
 
@@ -665,7 +667,7 @@ def _read_source(
     return sys.stdin.read()
 
 
-def _ilk_kurulum_ipucu() -> None:
+def _first_run_hint() -> None:
     """Config dosyası henüz yoksa kurulum sihirbazını hatırlatır.
 
     Dosya oluşur oluşmaz susar; ilk kullanıcıyı bir kez yakalamak yeterli,

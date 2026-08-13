@@ -313,8 +313,8 @@ def _parse_setting(key: str, raw: str) -> object:
 
     caster = _SCALAR_FIELDS.get(key)
     if caster is None:
-        gecerli = ", ".join([*_SCALAR_FIELDS, *_PATH_FIELDS])
-        raise ValueError(f"Bilinmeyen ayar: {key!r} (geçerli: {gecerli})")
+        valid_keys = ", ".join([*_SCALAR_FIELDS, *_PATH_FIELDS])
+        raise ValueError(f"Bilinmeyen ayar: {key!r} (geçerli: {valid_keys})")
 
     if caster is bool:
         if raw.lower() in ("true", "false"):
@@ -336,22 +336,22 @@ def _set_line(lines: list[str], key: str, new_line: str) -> list[str]:
     tablo içindeki aynı adlı bir anahtar yanlışlıkla değişirdi. Yorumlanmış
     (`# translate_to = ...`) satır da eşleşir — ayar böylece etkinleşir.
     """
-    desen = re.compile(rf"^\s*#?\s*{re.escape(key)}\s*=")
+    pattern = re.compile(rf"^\s*#?\s*{re.escape(key)}\s*=")
     header = next(
-        (i for i, satir in enumerate(lines) if satir.lstrip().startswith("[")),
+        (i for i, line in enumerate(lines) if line.lstrip().startswith("[")),
         len(lines),
     )
 
     for i in range(header):
-        if desen.match(lines[i]):
+        if pattern.match(lines[i]):
             return [*lines[:i], new_line, *lines[i + 1 :]]
 
     # Anahtar yoksa üst düzey bölümün sonuna, başlıktan önceki boş
     # satırların üstüne eklenir; böylece başlık öncesi boşluk korunur.
-    ek_yeri = header
-    while ek_yeri > 0 and not lines[ek_yeri - 1].strip():
-        ek_yeri -= 1
-    return [*lines[:ek_yeri], new_line, *lines[ek_yeri:]]
+    insert_at = header
+    while insert_at > 0 and not lines[insert_at - 1].strip():
+        insert_at -= 1
+    return [*lines[:insert_at], new_line, *lines[insert_at:]]
 
 
 def _toml_value(value: object) -> str:
