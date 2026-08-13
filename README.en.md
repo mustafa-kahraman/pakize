@@ -791,8 +791,12 @@ uv run pytest
 
 ## License
 
-[MIT](LICENSE) — use it, change it, distribute it; the only condition is keeping
-the copyright notice.
+Copyright (C) 2026 Mustafa Kahraman
+
+[AGPL-3.0-or-later](LICENSE) — use it, change it, distribute it; whoever
+distributes a modified version **or offers it as a network service** must
+release its source under the same license. Versions 0.3.0 and earlier were
+published under MIT and remain MIT; AGPL applies from this version on.
 
 Dependency licenses are separate and subject to their own terms:
 
@@ -803,6 +807,5 @@ Dependency licenses are separate and subject to their own terms:
 | `psutil` | BSD-3-Clause |
 | `tomli` | MIT |
 
-`edge-tts` is LGPL, but Pakize does not bundle it into the package; it is
-installed as a separate package and imported. LGPL explicitly permits this use,
-which is why Pakize's own code can stay MIT.
+All of them are AGPL-compatible; Pakize does not bundle them into the package,
+they are installed separately and imported.

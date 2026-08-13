@@ -764,7 +764,12 @@ uv run pytest
 
 ## Lisans
 
-[MIT](LICENSE) — kullan, değiştir, dağıt; tek şart telif notunu korumak.
+Copyright (C) 2026 Mustafa Kahraman
+
+[AGPL-3.0-or-later](LICENSE) — kullan, değiştir, dağıt; değiştirilmiş sürümü
+dağıtan **veya bir ağ servisi olarak sunan**, kaynağını aynı lisansla açmak
+zorundadır. 0.3.0 ve öncesi MIT ile yayımlanmıştı; o sürümler MIT kalır,
+AGPL bu sürümden itibaren geçerlidir.
 
 Bağımlılıkların lisansları ayrıdır ve kendi koşullarına tabidir:
 
@@ -775,6 +780,5 @@ Bağımlılıkların lisansları ayrıdır ve kendi koşullarına tabidir:
 | `psutil` | BSD-3-Clause |
 | `tomli` | MIT |
 
-`edge-tts` LGPL'dir ama Pakize onu paketin içine gömmez; ayrı bir paket olarak
-kurulur ve içe aktarılır. LGPL bu kullanımı açıkça serbest bırakır, bu yüzden
-Pakize'nin kendi kodu MIT kalabilir.
+Hepsi AGPL ile uyumludur; Pakize bunları paketin içine gömmez, ayrı paket
+olarak kurulup içe aktarılırlar.
