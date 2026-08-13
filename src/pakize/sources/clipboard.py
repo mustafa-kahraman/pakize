@@ -15,6 +15,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 
+from ..i18n import _
 from ..platforms import IS_MACOS, IS_WINDOWS
 
 
@@ -73,7 +74,9 @@ def read_clipboard() -> str:
         except ClipboardError as exc:
             errors.append(f"{reader.binary}: {exc}")
 
-    raise ClipboardError("Pano okunamadı — " + "; ".join(errors))
+    raise ClipboardError(
+        _("Pano okunamadı — {errors}").format(errors="; ".join(errors))
+    )
 
 
 def _install_hint() -> str:
@@ -83,10 +86,10 @@ def _install_hint() -> str:
     gelir, yokluğu bozuk bir kuruluma işaret eder.
     """
     if IS_MACOS:
-        return "Pano okunamıyor: pbpaste bulunamadı (macOS ile gelmesi gerekir)."
+        return _("Pano okunamıyor: pbpaste bulunamadı (macOS ile gelmesi gerekir).")
     if IS_WINDOWS:
-        return "Pano okunamıyor: PowerShell PATH üzerinde bulunamadı."
-    return (
+        return _("Pano okunamıyor: PowerShell PATH üzerinde bulunamadı.")
+    return _(
         "Pano okunamıyor: xclip, xsel veya wl-clipboard kurulu değil. "
         "Kurmak için: sudo apt install xclip"
     )
@@ -119,14 +122,16 @@ def _read_with(reader: _Reader) -> str:
     except OSError as exc:
         raise ClipboardError(str(exc)) from exc
     except subprocess.TimeoutExpired as exc:
-        raise ClipboardError("araç yanıt vermedi") from exc
+        raise ClipboardError(_("araç yanıt vermedi")) from exc
 
     if result.returncode != 0:
         # Boş pano da hata koduyla döner; bunu içerik yokluğu sayarız.
         stderr = (result.stderr or "").strip()
         if _bos_pano_hatasi(stderr):
             return ""
-        raise ClipboardError(stderr or f"çıkış kodu {result.returncode}")
+        raise ClipboardError(
+            stderr or _("çıkış kodu {code}").format(code=result.returncode)
+        )
 
     return result.stdout or ""
 

@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from ..i18n import _
+
 TRANSCRIPT_ROOT = Path.home() / ".claude" / "projects"
 
 _ROLE_LABELS = {"user": "Kullanıcı", "assistant": "Asistan"}
@@ -77,8 +79,10 @@ def latest_session(cwd: Path) -> Path:
     sessions = find_sessions(cwd)
     if not sessions:
         raise TranscriptError(
-            f"{cwd} için Claude Code oturum kaydı bulunamadı "
-            f"(bakılan yer: {session_dir(cwd)})"
+            _(
+                "{cwd} için Claude Code oturum kaydı bulunamadı "
+                "(bakılan yer: {looked})"
+            ).format(cwd=cwd, looked=session_dir(cwd))
         )
     return sessions[0]
 
@@ -131,7 +135,7 @@ def collect(path: Path, last: int | None = 1, roles: Roles = Roles.ASSISTANT) ->
     secilen = [turn for turn in read_turns(path) if roles.matches(turn.role)]
     if last is not None:
         if last < 1:
-            raise ValueError("last en az 1 olmalı")
+            raise ValueError(_("last en az 1 olmalı"))
         secilen = secilen[-last:]
 
     if not secilen:

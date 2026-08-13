@@ -608,6 +608,18 @@ language, texts in that language are read directly by the chosen voice, and
 combined with `translate_to` the translations of other languages come from the
 same voice too.
 
+### Interface language
+
+CLI messages and `--help` texts switch automatically between Turkish and
+English: a non-empty `ui_language` in the config wins; otherwise the system
+locale decides (`LC_ALL` > `LC_MESSAGES` > `LANG`). Every non-Turkish system
+sees English. To pin it manually:
+
+```bash
+pakize config set ui_language en
+pakize config set ui_language tr
+```
+
 For anyone unsure which voice to pick there is a wizard:
 
 ```bash

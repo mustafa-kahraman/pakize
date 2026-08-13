@@ -590,6 +590,21 @@ tanınanlarla sınırlıdır. Türkçe dışında bir ana dil kullanan, seçtiğ
 metinlerini doğrudan o sesle dinler; `translate_to` ile birleştirirse başka
 dildeki metinlerin çevirisini de aynı sesten dinler.
 
+### Arayüz dili
+
+CLI mesajları ve `--help` metinleri Türkçe ile İngilizce arasında kendiliğinden
+seçilir: config'te `ui_language` doluysa o kazanır; boşsa sistem diline bakılır
+(`LC_ALL` > `LC_MESSAGES` > `LANG`). Türkçe olmayan her sistem İngilizce görür.
+Elle sabitlemek için:
+
+```bash
+pakize config set ui_language tr   # sistem dili ne olursa olsun Türkçe
+pakize config set ui_language en
+```
+
+> Sistemi İngilizce kurulmuş Türkçe kullanıcılar (`LANG=en_US.UTF-8` yaygındır)
+> Türkçe arayüz için bu ayarı bir kez yapmalı.
+
 Hangi sesi seçeceğini bilmeyen için sihirbaz var:
 
 ```bash

@@ -18,6 +18,7 @@ from .audio import concat
 from .chunking import build_chunks
 from .config import Config
 from .engines import EngineError, EngineUnavailable, create_engine
+from .i18n import _
 from .models import Chunk, Segment, SegmentType
 from .parsing import apply_policy, parse_segments
 from .translate import GoogleTranslator, TranslationError, translate_segments
@@ -112,8 +113,10 @@ async def synthesize_async(
     plan = plan_speech(text, config)
     if not plan.chunks:
         raise EngineError(
-            "Seslendirilecek içerik kalmadı — metin tamamen atlanan "
-            "segmentlerden oluşuyor olabilir"
+            _(
+                "Seslendirilecek içerik kalmadı — metin tamamen atlanan "
+                "segmentlerden oluşuyor olabilir"
+            )
         )
 
     # Hepsi başarısız olursa birincil motorun hatası gösterilir: yedeğin

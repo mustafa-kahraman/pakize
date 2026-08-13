@@ -7,6 +7,7 @@ config'ten gelir. Yeni bir motor eklemek `_REGISTRY`'ye bir satır eklemektir.
 from __future__ import annotations
 
 from ..config import Config
+from ..i18n import _
 from .base import EngineError, EngineUnavailable, TtsEngine
 from .edge import EdgeEngine
 from .piper import PiperEngine
@@ -22,7 +23,11 @@ def create_engine(name: str, config: Config) -> TtsEngine:
     engine_class = _REGISTRY.get(name)
     if engine_class is None:
         known = ", ".join(sorted(_REGISTRY))
-        raise EngineError(f"Bilinmeyen motor: {name!r} (tanınanlar: {known})")
+        raise EngineError(
+            _("Bilinmeyen motor: {name!r} (tanınanlar: {known})").format(
+                name=name, known=known
+            )
+        )
     return engine_class(config)
 
 

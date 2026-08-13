@@ -24,6 +24,7 @@ import urllib.request
 from dataclasses import dataclass, replace
 from typing import Sequence
 
+from .i18n import _
 from .models import Segment, SegmentType
 
 ENDPOINT = "https://translate.googleapis.com/translate_a/single"
@@ -115,7 +116,9 @@ class GoogleTranslator:
             self.detected = data[2] if len(data) > 2 else None
             return "".join(parca[0] for parca in parcalar if parca and parca[0])
         except (IndexError, KeyError, TypeError) as exc:
-            raise TranslationError(f"Çeviri yanıtı anlaşılamadı: {exc}") from exc
+            raise TranslationError(
+                _("Çeviri yanıtı anlaşılamadı: {error}").format(error=exc)
+            ) from exc
 
     def _fetch(self, request: urllib.request.Request):
         """İsteği gönderir; hız sınırında artan gecikmeyle tekrar dener."""
@@ -131,7 +134,9 @@ class GoogleTranslator:
                 son_hata = exc
                 if exc.code not in (429, 503):
                     raise TranslationError(
-                        f"Çeviri servisi hata verdi (HTTP {exc.code})"
+                        _("Çeviri servisi hata verdi (HTTP {code})").format(
+                            code=exc.code
+                        )
                     ) from exc
                 time.sleep(RETRY_BASE_SECONDS * (2**deneme))
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
@@ -139,8 +144,10 @@ class GoogleTranslator:
                 time.sleep(RETRY_BASE_SECONDS * (2**deneme))
 
         raise TranslationError(
-            "Çeviri servisine ulaşılamadı. Ücretsiz uç geçici olarak "
-            f"engellemiş olabilir; biraz sonra tekrar dene. ({son_hata})"
+            _(
+                "Çeviri servisine ulaşılamadı. Ücretsiz uç geçici olarak "
+                "engellemiş olabilir; biraz sonra tekrar dene. ({error})"
+            ).format(error=son_hata)
         )
 
 
@@ -162,7 +169,7 @@ def translate_segments(
 
     # Satır sayısının korunabilmesi için her segment tek satıra indirgenir;
     # seslendirmede satır sonlarının zaten bir karşılığı yok.
-    satirlar = [" ".join(segment.text.split()) for _, segment in hedefler]
+    satirlar = [" ".join(segment.text.split()) for _index, segment in hedefler]
     cevrilen = translator.translate_lines(satirlar)
 
     if translator.detected and translator.detected == translator.target:

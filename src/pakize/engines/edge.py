@@ -12,6 +12,7 @@ from typing import ClassVar
 
 import edge_tts
 
+from ..i18n import _
 from .base import EngineError, EngineUnavailable, TtsEngine
 
 
@@ -20,7 +21,7 @@ class EdgeEngine(TtsEngine):
 
     def ensure_available(self) -> None:
         if not self.config.voice:
-            raise EngineUnavailable("edge motoru için bir ses adı gerekli")
+            raise EngineUnavailable(_("edge motoru için bir ses adı gerekli"))
 
     async def synthesize(self, text: str, destination: Path) -> None:
         # Kurucu da doğrulama yapıp hata fırlatıyor (geçersiz ses adı gibi);
@@ -36,12 +37,16 @@ class EdgeEngine(TtsEngine):
             )
             await communicate.save(str(destination))
         except Exception as exc:  # edge-tts ağ/protokol hatalarını çeşitlendirir
-            raise EngineError(f"edge-tts seslendirme başarısız: {exc}") from exc
+            raise EngineError(
+                _("edge-tts seslendirme başarısız: {error}").format(error=exc)
+            ) from exc
 
         if not destination.is_file() or destination.stat().st_size == 0:
             raise EngineError(
-                "edge-tts boş ses dosyası üretti — metin okunabilir içerik "
-                "içermiyor olabilir"
+                _(
+                    "edge-tts boş ses dosyası üretti — metin okunabilir içerik "
+                    "içermiyor olabilir"
+                )
             )
 
     @staticmethod

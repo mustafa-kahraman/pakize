@@ -16,6 +16,7 @@ import shutil
 from pathlib import Path
 from typing import ClassVar
 
+from ..i18n import _
 from .base import EngineError, EngineUnavailable, TtsEngine
 
 DEFAULT_BINARY = "piper"
@@ -30,11 +31,15 @@ class PiperEngine(TtsEngine):
         model = self.config.piper_model
         if model is None:
             raise EngineUnavailable(
-                "piper motoru için ses modeli gerekli. Config'e ekle:\n"
-                '  piper_model = "/yol/tr_TR-dfki-medium.onnx"'
+                _(
+                    "piper motoru için ses modeli gerekli. Config'e ekle:\n"
+                    '  piper_model = "/yol/tr_TR-dfki-medium.onnx"'
+                )
             )
         if not model.is_file():
-            raise EngineUnavailable(f"Piper ses modeli bulunamadı: {model}")
+            raise EngineUnavailable(
+                _("Piper ses modeli bulunamadı: {path}").format(path=model)
+            )
 
     async def synthesize(self, text: str, destination: Path) -> None:
         command = [
@@ -55,28 +60,35 @@ class PiperEngine(TtsEngine):
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await process.communicate(text.encode("utf-8"))
+        # `_` çeviri fonksiyonu olduğu için atılacak değer `_out` adını alır.
+        _out, stderr = await process.communicate(text.encode("utf-8"))
 
         if process.returncode != 0:
-            detay = stderr.decode(errors="replace").strip()
-            raise EngineError(f"piper seslendirme başarısız: {detay}")
+            detail = stderr.decode(errors="replace").strip()
+            raise EngineError(
+                _("piper seslendirme başarısız: {error}").format(error=detail)
+            )
 
         if not destination.is_file() or destination.stat().st_size == 0:
-            raise EngineError("piper boş ses dosyası üretti")
+            raise EngineError(_("piper boş ses dosyası üretti"))
 
     def _binary(self) -> str:
         """Piper çalıştırılabilirinin yolu; bulunamazsa kurulum ipucu verir."""
         configured = self.config.piper_binary
         if configured is not None:
             if not configured.is_file():
-                raise EngineUnavailable(f"piper çalıştırılabiliri yok: {configured}")
+                raise EngineUnavailable(
+                    _("piper çalıştırılabiliri yok: {path}").format(path=configured)
+                )
             return str(configured)
 
         found = shutil.which(DEFAULT_BINARY)
         if found is None:
             raise EngineUnavailable(
-                "piper bulunamadı. Kurmak için: uv tool install piper-tts\n"
-                "Kuruluysa yolunu config'e yaz: piper_binary = \"/yol/piper\""
+                _(
+                    "piper bulunamadı. Kurmak için: uv tool install piper-tts\n"
+                    'Kuruluysa yolunu config\'e yaz: piper_binary = "/yol/piper"'
+                )
             )
         return found
 
@@ -88,5 +100,5 @@ class PiperEngine(TtsEngine):
         """
         rate = self.config.rate
         if rate <= 0:
-            raise EngineError("rate pozitif olmalı")
+            raise EngineError(_("rate pozitif olmalı"))
         return 1.0 / rate

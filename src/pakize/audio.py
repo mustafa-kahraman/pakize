@@ -11,6 +11,7 @@ from pathlib import Path
 
 import psutil
 
+from .i18n import _
 from .platforms import install_hint
 
 _player_lock = threading.Lock()
@@ -54,7 +55,7 @@ def concat(parts: list[Path], destination: Path) -> Path:
     dönüştürme yapılır — aksi hâlde uzantısı mp3 olan bir WAV dosyası çıkardı.
     """
     if not parts:
-        raise AudioError("Birleştirilecek ses parçası yok")
+        raise AudioError(_("Birleştirilecek ses parçası yok"))
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     donusum_gerekli = _needs_transcode(parts, destination)
@@ -112,7 +113,8 @@ def play(path: Path) -> None:
     )
     _set_player(process)
     try:
-        _, stderr = process.communicate()
+        # `_` çeviri fonksiyonu olduğu için atılacak değer `_out` adını alır.
+        _out, stderr = process.communicate()
     finally:
         kesildi = _clear_player(process)
     _check_player_exit(process.returncode, stderr, kesildi)
@@ -130,7 +132,7 @@ async def play_async(path: Path) -> None:
     )
     _set_player(process)
     try:
-        _, stderr = await process.communicate()
+        _out, stderr = await process.communicate()
     finally:
         kesildi = _clear_player(process)
     _check_player_exit(process.returncode, stderr, kesildi)
@@ -202,8 +204,12 @@ def _check_player_exit(
     """
     if kesildi or returncode in (0, None) or returncode in _TERMINATION_CODES:
         return
-    detay = (stderr or b"").decode(errors="replace").strip()
-    raise AudioError(f"ffplay hata verdi (kod {returncode}): {detay}")
+    detail = (stderr or b"").decode(errors="replace").strip()
+    raise AudioError(
+        _("ffplay hata verdi (kod {code}): {error}").format(
+            code=returncode, error=detail
+        )
+    )
 
 
 def _play_command(path: Path) -> list[str]:
@@ -232,7 +238,9 @@ def _require_binary(name: str) -> str:
     path = shutil.which(name)
     if path is None:
         raise AudioError(
-            f"{name} bulunamadı. Kurmak için: {install_hint('ffmpeg')}"
+            _("{name} bulunamadı. Kurmak için: {hint}").format(
+                name=name, hint=install_hint("ffmpeg")
+            )
         )
     return path
 
@@ -241,6 +249,9 @@ def _run(command: list[str]) -> None:
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         raise AudioError(
-            f"{Path(command[0]).name} hata verdi (kod {result.returncode}): "
-            f"{result.stderr.strip()}"
+            _("{name} hata verdi (kod {code}): {error}").format(
+                name=Path(command[0]).name,
+                code=result.returncode,
+                error=result.stderr.strip(),
+            )
         )

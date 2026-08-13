@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Callable
 
 from .config import Config
+from .i18n import _
 from .pipeline import SpeechResult, synthesize
 from .platforms import install_hint
 
@@ -88,7 +89,7 @@ def load_text(path: Path) -> str:
     ayrımının tek güvenilir kaynağıdır.
     """
     if not path.is_file():
-        raise BookError(f"Dosya bulunamadı: {path}")
+        raise BookError(_("Dosya bulunamadı: {path}").format(path=path))
 
     if path.suffix.lower() in TEXT_SUFFIXES:
         return path.read_text(encoding="utf-8", errors="replace")
@@ -96,8 +97,12 @@ def load_text(path: Path) -> str:
     converter = shutil.which(CONVERTER)
     if converter is None:
         raise BookError(
-            f"{path.suffix} biçimi için {CONVERTER} gerekli "
-            f"(Calibre ile gelir): {install_hint('calibre')}"
+            _(
+                "{suffix} biçimi için {converter} gerekli "
+                "(Calibre ile gelir): {hint}"
+            ).format(
+                suffix=path.suffix, converter=CONVERTER, hint=install_hint("calibre")
+            )
         )
 
     with tempfile.TemporaryDirectory(prefix="pakize-kitap-") as workdir:
@@ -114,7 +119,9 @@ def load_text(path: Path) -> str:
         )
         if result.returncode != 0 or not target.is_file():
             raise BookError(
-                f"{CONVERTER} dönüştürme başarısız: {result.stderr.strip()[:400]}"
+                _("{converter} dönüştürme başarısız: {error}").format(
+                    converter=CONVERTER, error=result.stderr.strip()[:400]
+                )
             )
         return target.read_text(encoding="utf-8", errors="replace")
 
@@ -149,7 +156,7 @@ def narrate(
     """
     chapters = split_chapters(load_text(source), level)
     if not chapters:
-        raise BookError("Kitapta seslendirilecek metin bulunamadı")
+        raise BookError(_("Kitapta seslendirilecek metin bulunamadı"))
 
     destination.mkdir(parents=True, exist_ok=True)
     uretilen: list[Path] = []

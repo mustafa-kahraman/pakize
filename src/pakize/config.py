@@ -16,6 +16,7 @@ import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .i18n import _
 from .models import Action, SegmentType
 from .platforms import config_home, temp_root
 
@@ -74,6 +75,9 @@ class Config:
 
     normalize_decimals: bool = True
     """Ondalık sayılardaki noktayı virgüle çevir (Türkçe okunuş için)."""
+
+    ui_language: str = ""
+    """Arayüz dili ("tr"/"en"); boşsa sistem dilinden tespit edilir."""
 
     translate_to: str | None = None
     """Seslendirmeden önce çevrilecek hedef dil kodu; None ise çeviri yok."""
@@ -147,6 +151,7 @@ _SCALAR_FIELDS: dict[str, type] = {
     "volume": float,
     "max_chunk_chars": int,
     "normalize_decimals": bool,
+    "ui_language": str,
     "stream": bool,
     "translate_to": str,
     "translate_from": str,
@@ -186,6 +191,7 @@ _FIELD_NOTES: dict[str, str] = {
     "output_dir": "çıktı yolu verilmediğinde seslerin biriktiği dizin",
     "stream": "ilk parça hazır olunca çalmaya başla, hepsini bekleme",
     "normalize_decimals": "1.15 → 1,15 (Türkçe'de ondalık ayracı virgüldür)",
+    "ui_language": "arayüz dili (tr/en); boşsa sistem dilinden tespit edilir",
     "translate_to": "seslendirmeden önce çevrilecek dil (örn. tr); boşsa çeviri yok",
     "translate_from": "kaynak dil; auto ise servis kendisi tespit eder",
     "piper_model": "Piper ses modelinin (.onnx) yolu",
@@ -219,9 +225,9 @@ def render_default_config() -> str:
     """
     defaults = Config()
     satirlar = [
-        "# Pakize yapılandırması",
-        "# 'pakize config --init' ile üretildi.",
-        "# Bu dosyayı silersen Pakize varsayılanlarla çalışmaya devam eder.",
+        _("# Pakize yapılandırması"),
+        _("# 'pakize config --init' ile üretildi."),
+        _("# Bu dosyayı silersen Pakize varsayılanlarla çalışmaya devam eder."),
         "",
     ]
 
@@ -231,17 +237,20 @@ def render_default_config() -> str:
         # TOML'da boş değer yok; tanımsız ayarları örnek olarak yorumda bırakırız.
         if deger is None:
             satir = f"# {alan} = {_toml_value(_ORNEK_DEGERLER[alan])}"
-        satirlar.append(_yorumla(satir, aciklama))
+        satirlar.append(_yorumla(satir, _(aciklama)))
 
     satirlar += [
         "",
         "[policy]",
-        '# Her segment tipi için: "read" (oku), "announce" (anons et), "skip" (atla)',
+        _(
+            '# Her segment tipi için: "read" (oku), "announce" (anons et), '
+            '"skip" (atla)'
+        ),
     ]
     for segment_type, aciklama in _POLICY_NOTES.items():
         action = DEFAULT_POLICY[segment_type]
         satir = f'{segment_type.value} = "{action.value}"'
-        satirlar.append(_yorumla(satir, aciklama))
+        satirlar.append(_yorumla(satir, _(aciklama)))
 
     return "\n".join(satirlar) + "\n"
 
@@ -292,7 +301,7 @@ def set_config_value(key: str, raw_value: str, path: Path | None = None) -> str:
     rendered = _toml_value(value)
     line = f"{key} = {rendered}"
     if key in _FIELD_NOTES:
-        line = _yorumla(line, _FIELD_NOTES[key])
+        line = _yorumla(line, _(_FIELD_NOTES[key]))
 
     target = path or config_path()
     if target.is_file():
@@ -314,18 +323,28 @@ def _parse_setting(key: str, raw: str) -> object:
     caster = _SCALAR_FIELDS.get(key)
     if caster is None:
         valid_keys = ", ".join([*_SCALAR_FIELDS, *_PATH_FIELDS])
-        raise ValueError(f"Bilinmeyen ayar: {key!r} (geçerli: {valid_keys})")
+        raise ValueError(
+            _("Bilinmeyen ayar: {key!r} (geçerli: {valid_keys})").format(
+                key=key, valid_keys=valid_keys
+            )
+        )
 
     if caster is bool:
         if raw.lower() in ("true", "false"):
             return raw.lower() == "true"
-        raise ValueError(f"{key} için true/false bekleniyor: {raw!r}")
+        raise ValueError(
+            _("{key} için true/false bekleniyor: {value!r}").format(
+                key=key, value=raw
+            )
+        )
 
     try:
         return caster(raw)
     except ValueError as exc:
         raise ValueError(
-            f"{key} için geçersiz değer: {raw!r} ({caster.__name__} bekleniyor)"
+            _("{key} için geçersiz değer: {value!r} ({type} bekleniyor)").format(
+                key=key, value=raw, type=caster.__name__
+            )
         ) from exc
 
 
@@ -381,12 +400,16 @@ def _merge_policy(
         try:
             segment_type = SegmentType(raw_type)
         except ValueError as exc:
-            raise ValueError(f"Bilinmeyen segment tipi: {raw_type!r}") from exc
+            raise ValueError(
+                _("Bilinmeyen segment tipi: {type!r}").format(type=raw_type)
+            ) from exc
         try:
             merged[segment_type] = Action(raw_action)
         except ValueError as exc:
             raise ValueError(
-                f"{raw_type} için bilinmeyen eylem: {raw_action!r} "
-                f"(geçerli: read, announce, skip)"
+                _(
+                    "{type} için bilinmeyen eylem: {action!r} "
+                    "(geçerli: read, announce, skip)"
+                ).format(type=raw_type, action=raw_action)
             ) from exc
     return merged

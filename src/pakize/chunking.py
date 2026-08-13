@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 
+from .i18n import _
 from .models import Chunk
 
 # Cümle sonu: nokta/ünlem/soru/üç nokta + boşluk. Ondalıklı sayıları (1.15) ve
@@ -22,7 +23,7 @@ _SOFT_BREAK_RE = re.compile(r"(?<=[,;:])\s+")
 def build_chunks(utterances: list[str], max_chars: int) -> list[Chunk]:
     """Söyleyişleri sırayı bozmadan `max_chars`'ı aşmayan parçalara paketler."""
     if max_chars <= 0:
-        raise ValueError("max_chars pozitif olmalı")
+        raise ValueError(_("max_chars pozitif olmalı"))
 
     pieces: list[str] = []
     for utterance in utterances:
