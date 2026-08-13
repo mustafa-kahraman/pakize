@@ -228,10 +228,12 @@ pakize stop                   # çalmakta olan seslendirmeyi durdur
 pakize replay                 # en son üretilen sesi yeniden çal
 pakize replay --list          # son üretilen sesleri tarihiyle listele
 pakize replay --list -n 30    # daha fazlasını göster
-pakize voices                 # Türkçe sesleri listele
-pakize voices -l all          # tüm dilleri listele
+pakize voices                 # Türkçe sesler + diğer dillerin özeti
+pakize voices -l de           # bir dilin seslerini listele
+pakize voices -l all          # tüm sesleri listele
 pakize config                 # etkin ayarları göster
 pakize config --init          # açıklamalı config dosyası oluştur
+pakize config set voice de-AT-IngridNeural   # bir ayarı dosyaya yaz
 ```
 
 ## Çeviri
@@ -245,7 +247,7 @@ pakize speak -t -T en                    # son cevabı İngilizce dinle
 ```
 
 Kaynak dil kendiliğinden tespit edilir; zaten hedef dildeyse metne dokunulmaz.
-Kalıcı hâle getirmek için config'e `translate_to = "tr"` yaz.
+Kalıcı hâle getirmek için: `pakize config set translate_to tr`.
 
 ### Nereye yerleşiyor
 
@@ -572,6 +574,20 @@ pakize config --init
 
 Dosya, koddaki gerçek varsayılanlardan üretilir — ikinci bir doğruluk kaynağı
 oluşmaz. Var olan dosyanın üzerine yazmaz.
+
+Dosyayı elle düzenlemek istemeyen tek bir ayarı komutla yazabilir:
+
+```bash
+pakize config set voice de-AT-IngridNeural   # ana dili Almanca yap
+pakize config set rate 1.2
+pakize config set translate_to de            # metinleri önce Almancaya çevir
+```
+
+`set`, dosya yoksa açıklamalı varsayılanlarla oluşturur; varsa yalnızca ilgili
+satırı değiştirir. Ses adı servis listesine karşı doğrulanır; motor adı
+tanınanlarla sınırlıdır. Türkçe dışında bir ana dil kullanan, seçtiği dilin
+metinlerini doğrudan o sesle dinler; `translate_to` ile birleştirirse başka
+dildeki metinlerin çevirisini de aynı sesten dinler.
 
 ```toml
 voice = "tr-TR-EmelNeural"       # tr-TR-AhmetNeural de var

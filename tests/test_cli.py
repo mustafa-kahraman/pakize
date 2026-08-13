@@ -359,3 +359,144 @@ def test_config_komutu_etkin_ayarlari_gosterir(cikti_dizini):
     assert "tr-TR-EmelNeural" in sonuc.stdout
     assert str(cikti_dizini) in sonuc.stdout
     assert "Akıcı çalma" in sonuc.stdout
+
+
+SAHTE_SESLER = [
+    {
+        "ShortName": "tr-TR-AhmetNeural",
+        "Gender": "Male",
+        "Locale": "tr-TR",
+        "LocaleName": "Turkish (Turkey)",
+    },
+    {
+        "ShortName": "tr-TR-EmelNeural",
+        "Gender": "Female",
+        "Locale": "tr-TR",
+        "LocaleName": "Turkish (Turkey)",
+    },
+    {
+        "ShortName": "de-AT-IngridNeural",
+        "Gender": "Female",
+        "Locale": "de-AT",
+        "LocaleName": "German (Austria)",
+    },
+    {
+        "ShortName": "de-DE-KatjaNeural",
+        "Gender": "Female",
+        "Locale": "de-DE",
+        "LocaleName": "German (Germany)",
+    },
+    {
+        "ShortName": "en-US-AriaNeural",
+        "Gender": "Female",
+        "Locale": "en-US",
+        "LocaleName": "English (United States)",
+    },
+]
+
+
+@pytest.fixture
+def ses_listesi(monkeypatch):
+    """`EdgeEngine.list_voices`'i ağa çıkmayan sabit bir listeye bağlar."""
+
+    async def sahte(language=None):
+        if language is None:
+            return SAHTE_SESLER
+        return [
+            v
+            for v in SAHTE_SESLER
+            if v["ShortName"].lower().startswith(language.lower())
+        ]
+
+    monkeypatch.setattr(cli.EdgeEngine, "list_voices", staticmethod(sahte))
+
+
+def test_voices_ozet_gorunumu_turkceyi_one_cikarir(ses_listesi):
+    sonuc = runner.invoke(cli.app, ["voices"])
+
+    assert sonuc.exit_code == 0
+    assert "Türkçe" in sonuc.stdout
+    assert "tr-TR-EmelNeural" in sonuc.stdout
+    # Diğer diller tek satırlık özet olarak görünür; sesler dökülmez.
+    assert "de-AT-IngridNeural" not in sonuc.stdout
+    assert "German" in sonuc.stdout
+    assert "2 ses" in sonuc.stdout
+    assert "English" in sonuc.stdout
+
+
+def test_voices_dil_filtresi_yalniz_o_dili_listeler(ses_listesi):
+    sonuc = runner.invoke(cli.app, ["voices", "-l", "de"])
+
+    assert sonuc.exit_code == 0
+    assert "de-AT-IngridNeural" in sonuc.stdout
+    assert "de-DE-KatjaNeural" in sonuc.stdout
+    assert "tr-TR-EmelNeural" not in sonuc.stdout
+
+
+def test_voices_bilinmeyen_dil_anlamli_mesaj_verir(ses_listesi):
+    sonuc = runner.invoke(cli.app, ["voices", "-l", "xx"])
+
+    assert sonuc.exit_code == 0
+    assert "ses bulunamadı" in sonuc.stdout
+
+
+@pytest.fixture
+def config_dosyasi(tmp_path, monkeypatch) -> Path:
+    hedef = tmp_path / "pakize" / "config.toml"
+    monkeypatch.setattr(cli, "config_path", lambda: hedef)
+    return hedef
+
+
+def test_config_set_gecerli_sesi_yazar(ses_listesi, config_dosyasi):
+    sonuc = runner.invoke(cli.app, ["config", "set", "voice", "de-AT-IngridNeural"])
+
+    assert sonuc.exit_code == 0
+    assert "Yazıldı" in sonuc.stdout
+    assert 'voice = "de-AT-IngridNeural"' in config_dosyasi.read_text(encoding="utf-8")
+
+
+def test_config_set_bilinmeyen_sesi_reddeder(ses_listesi, config_dosyasi):
+    sonuc = runner.invoke(cli.app, ["config", "set", "voice", "de-AT-YokNeural"])
+
+    assert sonuc.exit_code == 1
+    assert "Ses bulunamadı" in sonuc.stderr
+    assert "de-AT-IngridNeural" in sonuc.stderr  # benzer ad önerilir
+    assert not config_dosyasi.exists()
+
+
+def test_config_set_liste_alinamazsa_uyarir_ama_yazar(config_dosyasi, monkeypatch):
+    """Çevrimdışıyken ayar değiştirme engellenmemeli; yalnızca uyarılmalı."""
+
+    async def patla(language=None):
+        raise ConnectionError("ağ yok")
+
+    monkeypatch.setattr(cli.EdgeEngine, "list_voices", staticmethod(patla))
+
+    sonuc = runner.invoke(cli.app, ["config", "set", "voice", "de-AT-IngridNeural"])
+
+    assert sonuc.exit_code == 0
+    assert "doğrulanmadan" in sonuc.stderr
+    assert 'voice = "de-AT-IngridNeural"' in config_dosyasi.read_text(encoding="utf-8")
+
+
+def test_config_set_ses_disi_ayarlari_da_yazar(config_dosyasi):
+    sonuc = runner.invoke(cli.app, ["config", "set", "translate_to", "de"])
+
+    assert sonuc.exit_code == 0
+    assert 'translate_to = "de"' in config_dosyasi.read_text(encoding="utf-8")
+
+
+def test_config_set_bilinmeyen_ayari_reddeder(config_dosyasi):
+    sonuc = runner.invoke(cli.app, ["config", "set", "ses", "x"])
+
+    assert sonuc.exit_code == 1
+    assert "Bilinmeyen ayar" in sonuc.stderr
+    assert not config_dosyasi.exists()
+
+
+def test_config_set_bilinmeyen_motoru_reddeder(config_dosyasi):
+    sonuc = runner.invoke(cli.app, ["config", "set", "engine", "yok"])
+
+    assert sonuc.exit_code == 1
+    assert "Bilinmeyen motor" in sonuc.stderr
+    assert not config_dosyasi.exists()

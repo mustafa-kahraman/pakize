@@ -17,7 +17,13 @@ from pathlib import Path
 import typer
 
 from . import audio, book, runtime
-from .config import Config, config_path, load_config, write_default_config
+from .config import (
+    Config,
+    config_path,
+    load_config,
+    set_config_value,
+    write_default_config,
+)
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
 from .pipeline import TranslationError, plan_speech, synthesize
@@ -333,24 +339,73 @@ def replay(
 @app.command()
 def voices(
     language: str = typer.Option(
-        "tr", "--language", "-l", help="Dil ön eki (örn. tr, en-US). Tümü için: all."
+        None,
+        "--language",
+        "-l",
+        help="Dil ön eki (örn. de, en-US); tümü için: all. Verilmezse özet görünüm.",
     ),
 ) -> None:
     """Edge motorunun sunduğu sesleri listeler."""
     import asyncio
 
-    prefix = None if language.lower() == "all" else language
-    found = asyncio.run(EdgeEngine.list_voices(prefix))
-    if not found:
-        typer.secho(f"{language} için ses bulunamadı.", fg=typer.colors.YELLOW)
+    if language is not None:
+        prefix = None if language.lower() == "all" else language
+        found = asyncio.run(EdgeEngine.list_voices(prefix))
+        if not found:
+            typer.secho(f"{language} için ses bulunamadı.", fg=typer.colors.YELLOW)
+            return
+        _print_voices(found)
         return
 
-    for entry in found:
+    # Bayrak verilmediğinde tam döküm yerine özet: Türkçe sesler öne çıkar,
+    # diğer 70+ dil tek satırlık başlıklarla listelenir; 300+ satır dökülmez.
+    all_voices = asyncio.run(EdgeEngine.list_voices(None))
+    turkce = [v for v in all_voices if v["Locale"].startswith("tr-")]
+    digerleri = [v for v in all_voices if not v["Locale"].startswith("tr-")]
+
+    typer.secho("── Türkçe ──", bold=True)
+    _print_voices(turkce)
+
+    typer.echo("")
+    typer.secho("── Diğer diller (ayrıntı için: pakize voices -l de) ──", bold=True)
+    for kod, ad, adet in _language_summary(digerleri):
+        typer.echo(f"{kod:<8} {ad:<32} {adet} ses")
+
+
+def _print_voices(entries: list[dict]) -> None:
+    for entry in entries:
         typer.echo(f"{entry['ShortName']:<34} {entry['Gender']:<8} {entry['Locale']}")
 
 
-@app.command("config")
+def _language_summary(entries: list[dict]) -> list[tuple[str, str, int]]:
+    """Sesleri dile göre gruplar: (dil kodu, dil adı, ses sayısı) listesi.
+
+    Dil adı servisin `LocaleName` alanından gelir ("German (Austria)" → "German");
+    elle tutulan ikinci bir dil sözlüğü olmasın diye ülke kısmı atılır.
+    """
+    gruplar: dict[str, list[dict]] = {}
+    for entry in entries:
+        gruplar.setdefault(entry["Locale"].split("-")[0], []).append(entry)
+
+    ozet = []
+    for kod in sorted(gruplar):
+        ilk = gruplar[kod][0]
+        ad = ilk.get("LocaleName", ilk["Locale"]).split(" (")[0]
+        ozet.append((kod, ad, len(gruplar[kod])))
+    return ozet
+
+
+config_app = typer.Typer(invoke_without_command=True)
+app.add_typer(
+    config_app,
+    name="config",
+    help="Etkin ayarları gösterir; 'set' alt komutu ile değiştirir.",
+)
+
+
+@config_app.callback()
 def show_config(
+    ctx: typer.Context,
     init: bool = typer.Option(
         False,
         "--init",
@@ -358,6 +413,9 @@ def show_config(
     ),
 ) -> None:
     """Etkin ayarları ve config dosyasının yolunu gösterir."""
+    if ctx.invoked_subcommand is not None:
+        return
+
     path = config_path()
 
     if init:
@@ -389,6 +447,68 @@ def show_config(
     typer.echo("Politika:")
     for segment_type, action in sorted(config.policy.items(), key=lambda kv: kv[0].value):
         typer.echo(f"  {segment_type.value:<18} {action.value}")
+
+
+@config_app.command("set")
+def set_setting(
+    key: str = typer.Argument(
+        ..., metavar="AYAR", help="Ayar adı (örn. voice, rate, translate_to)."
+    ),
+    value: str = typer.Argument(..., metavar="DEĞER", help="Yazılacak yeni değer."),
+) -> None:
+    """Bir ayarı config dosyasına yazar; dosya yoksa oluşturur."""
+    if key == "voice":
+        _validate_voice(value)
+    if key in ("engine", "fallback_engine") and value not in available_engines():
+        typer.secho(
+            f"Bilinmeyen motor: {value!r} (tanınanlar: {', '.join(available_engines())})",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    path = config_path()
+    try:
+        yazilan = set_config_value(key, value, path)
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from None
+
+    typer.secho(f"Yazıldı: {key} = {yazilan}", fg=typer.colors.GREEN)
+    typer.echo(f"Config dosyası: {path}")
+
+
+def _validate_voice(name: str) -> None:
+    """Ses adını edge'in listesine karşı doğrular.
+
+    Liste ağdan gelir; ulaşılamazsa yazma engellenmez — çevrimdışıyken de
+    ayar değiştirilebilmeli. Ad listede yoksa yazım hatasıdır, erken durdurulur.
+    """
+    import asyncio
+
+    try:
+        found = asyncio.run(EdgeEngine.list_voices(None))
+    except Exception:
+        typer.secho(
+            "Uyarı: ses listesine ulaşılamadı, ad doğrulanmadan yazılıyor.",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+        return
+
+    if any(entry["ShortName"] == name for entry in found):
+        return
+
+    typer.secho(f"Ses bulunamadı: {name!r}", fg=typer.colors.RED, err=True)
+    benzerler = [
+        entry["ShortName"]
+        for entry in found
+        if entry["ShortName"].lower().startswith(name.lower()[:5])
+    ]
+    if benzerler:
+        typer.echo("Benzer adlar: " + ", ".join(benzerler[:5]), err=True)
+    typer.echo("Tüm liste için: pakize voices -l all", err=True)
+    raise typer.Exit(code=1)
 
 
 def _read_source(

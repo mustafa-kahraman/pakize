@@ -11,6 +11,7 @@ gömülü bir kural değil, kullanıcının değiştirebildiği bir tercih olur.
 
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -137,28 +138,33 @@ def load_config(path: Path | None = None) -> Config:
     return _apply_overrides(Config(), data)
 
 
+_SCALAR_FIELDS: dict[str, type] = {
+    "voice": str,
+    "engine": str,
+    "fallback_engine": str,
+    "rate": float,
+    "pitch_hz": int,
+    "volume": float,
+    "max_chunk_chars": int,
+    "normalize_decimals": bool,
+    "stream": bool,
+    "translate_to": str,
+    "translate_from": str,
+}
+"""Config dosyasında tanınan düz ayarlar ve tipleri."""
+
+_PATH_FIELDS = ("piper_model", "piper_binary", "output_dir")
+"""Dosya yolu tutan ayarlar; okunurken `~` genişletilir."""
+
+
 def _apply_overrides(base: Config, data: dict) -> Config:
     """TOML sözlüğündeki tanınan anahtarları Config üzerine uygular."""
-    scalar_fields = {
-        "voice": str,
-        "engine": str,
-        "fallback_engine": str,
-        "rate": float,
-        "pitch_hz": int,
-        "volume": float,
-        "max_chunk_chars": int,
-        "normalize_decimals": bool,
-        "stream": bool,
-        "translate_to": str,
-        "translate_from": str,
-    }
-
     overrides: dict = {}
-    for key, caster in scalar_fields.items():
+    for key, caster in _SCALAR_FIELDS.items():
         if key in data and data[key] is not None:
             overrides[key] = caster(data[key])
 
-    for key in ("piper_model", "piper_binary", "output_dir"):
+    for key in _PATH_FIELDS:
         if data.get(key):
             overrides[key] = Path(str(data[key])).expanduser()
 
@@ -274,6 +280,78 @@ def write_default_config(path: Path | None = None) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(render_default_config(), encoding="utf-8")
     return target
+
+
+def set_config_value(key: str, raw_value: str, path: Path | None = None) -> str:
+    """Tek bir ayarı config dosyasına yazar; yazılan TOML değerini döner.
+
+    Dosya yoksa açıklamalı varsayılan içerikle oluşturulur; varsa yalnızca
+    ilgili satır değiştirilir, kullanıcının diğer satırları olduğu gibi kalır.
+    """
+    value = _parse_setting(key, raw_value)
+    rendered = _toml_value(value)
+    line = f"{key} = {rendered}"
+    if key in _FIELD_NOTES:
+        line = _yorumla(line, _FIELD_NOTES[key])
+
+    target = path or config_path()
+    if target.is_file():
+        content = target.read_text(encoding="utf-8")
+    else:
+        content = render_default_config()
+
+    lines = _set_line(content.splitlines(), key, line)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return rendered
+
+
+def _parse_setting(key: str, raw: str) -> object:
+    """CLI'dan gelen metin değeri ayarın tipine çevirir; tanımazsa hata verir."""
+    if key in _PATH_FIELDS:
+        return raw
+
+    caster = _SCALAR_FIELDS.get(key)
+    if caster is None:
+        gecerli = ", ".join([*_SCALAR_FIELDS, *_PATH_FIELDS])
+        raise ValueError(f"Bilinmeyen ayar: {key!r} (geçerli: {gecerli})")
+
+    if caster is bool:
+        if raw.lower() in ("true", "false"):
+            return raw.lower() == "true"
+        raise ValueError(f"{key} için true/false bekleniyor: {raw!r}")
+
+    try:
+        return caster(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"{key} için geçersiz değer: {raw!r} ({caster.__name__} bekleniyor)"
+        ) from exc
+
+
+def _set_line(lines: list[str], key: str, new_line: str) -> list[str]:
+    """Üst düzey bölümde ayarın satırını değiştirir ya da uygun yere ekler.
+
+    Yalnızca ilk tablo başlığına (`[policy]` gibi) kadar bakılır; aksi hâlde
+    tablo içindeki aynı adlı bir anahtar yanlışlıkla değişirdi. Yorumlanmış
+    (`# translate_to = ...`) satır da eşleşir — ayar böylece etkinleşir.
+    """
+    desen = re.compile(rf"^\s*#?\s*{re.escape(key)}\s*=")
+    header = next(
+        (i for i, satir in enumerate(lines) if satir.lstrip().startswith("[")),
+        len(lines),
+    )
+
+    for i in range(header):
+        if desen.match(lines[i]):
+            return [*lines[:i], new_line, *lines[i + 1 :]]
+
+    # Anahtar yoksa üst düzey bölümün sonuna, başlıktan önceki boş
+    # satırların üstüne eklenir; böylece başlık öncesi boşluk korunur.
+    ek_yeri = header
+    while ek_yeri > 0 and not lines[ek_yeri - 1].strip():
+        ek_yeri -= 1
+    return [*lines[:ek_yeri], new_line, *lines[ek_yeri:]]
 
 
 def _toml_value(value: object) -> str:

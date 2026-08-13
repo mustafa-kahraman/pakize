@@ -235,10 +235,12 @@ pakize stop                   # stop the playback in progress
 pakize replay                 # replay the most recently produced audio
 pakize replay --list          # list recent recordings with timestamps
 pakize replay --list -n 30    # show more of them
-pakize voices                 # list Turkish voices
-pakize voices -l all          # list every language
+pakize voices                 # Turkish voices + a summary of other languages
+pakize voices -l de           # list one language's voices
+pakize voices -l all          # list every voice
 pakize config                 # show effective settings
 pakize config --init          # create an annotated config file
+pakize config set voice de-AT-IngridNeural   # write one setting to the file
 ```
 
 ## Translation
@@ -252,8 +254,8 @@ pakize speak -t -T en                     # hear the last answer in English
 ```
 
 The source language is detected automatically; if the text is already in the
-target language it is left alone. To make it permanent, put
-`translate_to = "tr"` in the config.
+target language it is left alone. To make it permanent:
+`pakize config set translate_to tr`.
 
 ### Where it sits
 
@@ -589,6 +591,21 @@ pakize config --init
 
 The file is generated from the real defaults in the code — no second source of
 truth. It never overwrites an existing file.
+
+A single setting can be written from the command line, no manual editing needed:
+
+```bash
+pakize config set voice de-AT-IngridNeural   # make German the main language
+pakize config set rate 1.2
+pakize config set translate_to de            # translate texts to German first
+```
+
+`set` creates the file with annotated defaults when it is missing; otherwise it
+changes only the relevant line. Voice names are validated against the service's
+list; engine names are limited to the known ones. With a non-Turkish main
+language, texts in that language are read directly by the chosen voice, and
+combined with `translate_to` the translations of other languages come from the
+same voice too.
 
 ```toml
 voice = "tr-TR-EmelNeural"       # tr-TR-AhmetNeural is also available
