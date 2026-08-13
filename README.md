@@ -5,9 +5,10 @@
 [![CI](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml/badge.svg)](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/pakize?logo=pypi&logoColor=white)](https://pypi.org/project/pakize/)
 
-https://github.com/mustafa-kahraman/pakize/raw/main/docs/demo-tr.mp4
+[![Pakize tanıtımı](https://github.com/mustafa-kahraman/pakize/raw/main/docs/demo-tr.gif)](https://github.com/mustafa-kahraman/pakize/blob/main/docs/demo-tr.mp4)
 
-> 29 saniyelik tanıtım — sesi aç. Videodaki anlatımı Pakize'nin kendisi üretti.
+> Yukarısı sessiz önizleme. **Sesli tam sürüm için görsele tıkla** (29 sn) —
+> videodaki anlatımı Pakize'nin kendisi üretti.
 
 Metni ses dosyasına çeviren yerel araç. Markdown'ı anlar: **kod bloklarını
 okumaz**, yerlerine kısa bir anons koyar; tabloları, bağlantıları ve biçim
