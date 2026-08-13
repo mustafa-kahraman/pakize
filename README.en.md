@@ -2,6 +2,8 @@
 
 # Pakize
 
+[![CI](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml/badge.svg)](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml)
+
 A local tool that turns text into audio. It understands Markdown: it **does not
 read code blocks** — it replaces them with a short announcement — and filters
 tables, links and formatting marks according to a policy you control.

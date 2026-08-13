@@ -1,0 +1,44 @@
+# Testleri üç platformda koşar.
+#
+# README üç işletim sistemini de desteklediğini söylüyor; bu iş akışı o iddiayı
+# her commit'te kanıtlar. Testler hermetiktir — ağ, ffmpeg ve gerçek TTS
+# çağrısı yoktur — bu yüzden koşuculara ek bir araç kurmak gerekmez.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Aynı dala arka arkaya push yapılırsa önceki koşu iptal edilir.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} · Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Bir platform kalırsa diğerleri yine de koşsun; hangilerinin geçtiğini
+      # görmek, ilk kırmızıda durmaktan daha bilgilendirici.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Alt ve üst sınır: aradaki sürümler için ayrıca koşmak, koşu
+        # süresini üçe katlamaya değecek bilgi vermiyor.
+        python: ["3.10", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Testler
+        run: uv run --python ${{ matrix.python }} --locked pytest -q

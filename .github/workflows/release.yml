@@ -1,0 +1,87 @@
+# Etiket atıldığında paketi üretir, PyPI'ye yayımlar ve GitHub Release açar.
+#
+# Yayımlama Trusted Publishing (OIDC) ile yapılır: depoda saklanan uzun ömürlü
+# bir API token'ı yoktur. PyPI, bu depoyu ve bu dosyanın adını tanıdığı için
+# koşu sırasında kısa ömürlü bir kimlik üretilir.
+#
+# Kullanımı:  git tag v0.3.0 && git push github v0.3.0
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Paketi üret
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Etiket ile sürüm numarası aynı mı
+        # Yanlış etiketle yayımlamak PyPI'de geri alınamaz: bir sürüm numarası
+        # bir kez kullanılınca tekrar yüklenemez. Bu yüzden önce doğrularız.
+        run: |
+          version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          tag=${GITHUB_REF_NAME#v}
+          if [ "$version" != "$tag" ]; then
+            echo "Etiket ($tag) ile pyproject sürümü ($version) uyuşmuyor." >&2
+            exit 1
+          fi
+          echo "Sürüm doğrulandı: $version"
+
+      - name: Testler
+        run: uv run --locked pytest -q
+
+      - name: Paket
+        run: uv build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: PyPI'ye yayımla
+    needs: build
+    runs-on: ubuntu-latest
+    # PyPI'deki "Environment name" alanına da bu ad yazılmalıdır.
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pakize/
+    permissions:
+      # OIDC kimliği bu izinle üretilir; Trusted Publishing'in çalışma şartı.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: GitHub Release aç
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes

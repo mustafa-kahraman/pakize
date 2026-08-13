@@ -2,6 +2,8 @@
 
 # Pakize
 
+[![CI](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml/badge.svg)](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml)
+
 Metni ses dosyasına çeviren yerel araç. Markdown'ı anlar: **kod bloklarını
 okumaz**, yerlerine kısa bir anons koyar; tabloları, bağlantıları ve biçim
 işaretlerini de politikaya göre eler.

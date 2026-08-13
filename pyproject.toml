@@ -9,12 +9,45 @@ authors = [
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
+keywords = [
+    "tts",
+    "text-to-speech",
+    "cli",
+    "markdown",
+    "audiobook",
+    "turkish",
+    "edge-tts",
+    "piper",
+    "accessibility",
+]
+# Lisans burada SPDX ifadesiyle verildiği için ayrıca "License ::" sınıflandırıcısı
+# yazılmaz; ikisi bir arada olursa PyPI paketi reddeder.
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: Turkish",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Utilities",
+]
+
 dependencies = [
     "edge-tts>=7.2.8",
     "psutil>=6.0",
     "tomli>=2.0 ; python_full_version < '3.11'",
     "typer>=0.27.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mustafa-kahraman/pakize"
+Repository = "https://github.com/mustafa-kahraman/pakize"
+Issues = "https://github.com/mustafa-kahraman/pakize/issues"
 
 [project.scripts]
 pakize = "pakize.cli:main"
