@@ -3,6 +3,7 @@
 # Pakize
 
 [![CI](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml/badge.svg)](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/pakize?logo=pypi&logoColor=white)](https://pypi.org/project/pakize/)
 
 Metni ses dosyasına çeviren yerel araç. Markdown'ı anlar: **kod bloklarını
 okumaz**, yerlerine kısa bir anons koyar; tabloları, bağlantıları ve biçim
@@ -79,13 +80,14 @@ winget install Gyan.FFmpeg
 
 ### 3. Pakize'yi kur
 
-**Hazır paket (`.whl` dosyası) aldıysan** — dosyanın bulunduğu dizinde:
-
 ```bash
-uv tool install pakize-0.3.0-py3-none-any.whl
+uv tool install pakize
 ```
 
-**Depodan kuruyorsan** — proje dizininde:
+Paketi [PyPI'den](https://pypi.org/project/pakize/) indirir; depoyu klonlamana
+gerek yoktur.
+
+**Geliştirmek için depodan kuruyorsan** — proje dizininde:
 
 ```bash
 uv tool install --editable .
@@ -124,9 +126,15 @@ Kaldırmak için: `uv tool uninstall pakize`.
 
 ### Güncelleme
 
-**`git pull` tek başına yetmez.** `--editable` kurulumda kod anında güncellenir
-ama bağımlılık listesi değiştiyse araç ortamı eski kalır ve şuna benzer bir hata
-alırsın:
+PyPI'den kurduysan:
+
+```bash
+uv tool upgrade pakize
+```
+
+**Depodan kurduysan `git pull` tek başına yetmez.** `--editable` kurulumda kod
+anında güncellenir ama bağımlılık listesi değiştiyse araç ortamı eski kalır ve
+şuna benzer bir hata alırsın:
 
 ```
 ModuleNotFoundError: No module named 'psutil'
@@ -136,12 +144,6 @@ Yeniden kurmak yeterli — `--force`, var olan kurulumun üzerine yazar:
 
 ```bash
 uv tool install --editable . --force
-```
-
-Hazır paketten kurduysan yeni `.whl` dosyasıyla aynı komutu çalıştır:
-
-```bash
-uv tool install pakize-0.3.0-py3-none-any.whl --force
 ```
 
 ### İsteğe bağlı araçlar
@@ -166,9 +168,16 @@ Başkasına göndermek üzere dağıtılabilir paket üretmek için:
 uv build          # dist/ altına .whl ve .tar.gz yazar
 ```
 
-Üretilen `.whl` dosyasını gönderdiğin kişi yukarıdaki 1-2-3. adımları
-uygulayarak kurar. Paket yalnızca Python bağımlılıklarını taşır; `ffmpeg` ve
-isteğe bağlı araçlar her makinede ayrıca gerekir.
+Bu, internetsiz bir makineye kurulum için işe yarar; normal şartlarda karşı
+taraf `uv tool install pakize` demeyi tercih eder. Dosyayı alan kişi, yolunu
+vererek kurar:
+
+```bash
+uv tool install /yol/pakize-0.3.0-py3-none-any.whl
+```
+
+Paket yalnızca Python bağımlılıklarını taşır; `ffmpeg` ve isteğe bağlı araçlar
+her makinede ayrıca gerekir.
 
 ## Kullanım
 

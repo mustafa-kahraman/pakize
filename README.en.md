@@ -3,6 +3,7 @@
 # Pakize
 
 [![CI](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml/badge.svg)](https://github.com/mustafa-kahraman/pakize/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/pakize?logo=pypi&logoColor=white)](https://pypi.org/project/pakize/)
 
 A local tool that turns text into audio. It understands Markdown: it **does not
 read code blocks** — it replaces them with a short announcement — and filters
@@ -85,14 +86,15 @@ winget install Gyan.FFmpeg
 
 ### 3. Install Pakize
 
-**If you received a built package (`.whl` file)** — in the directory containing
-the file:
-
 ```bash
-uv tool install pakize-0.3.0-py3-none-any.whl
+uv tool install pakize
 ```
 
-**If you are installing from the repository** — in the project directory:
+This downloads the package from [PyPI](https://pypi.org/project/pakize/); you do
+not need to clone the repository.
+
+**If you are installing from the repository to develop it** — in the project
+directory:
 
 ```bash
 uv tool install --editable .
@@ -130,9 +132,15 @@ To uninstall: `uv tool uninstall pakize`.
 
 ### Updating
 
-**`git pull` alone is not enough.** With an `--editable` install the code
-updates instantly, but if the dependency list changed, the tool environment
-stays stale and you get an error like:
+If you installed from PyPI:
+
+```bash
+uv tool upgrade pakize
+```
+
+**If you installed from the repository, `git pull` alone is not enough.** With an
+`--editable` install the code updates instantly, but if the dependency list
+changed, the tool environment stays stale and you get an error like:
 
 ```
 ModuleNotFoundError: No module named 'psutil'
@@ -142,12 +150,6 @@ Reinstalling is enough — `--force` overwrites the existing installation:
 
 ```bash
 uv tool install --editable . --force
-```
-
-If you installed from a built package, run the same command with the new `.whl`:
-
-```bash
-uv tool install pakize-0.3.0-py3-none-any.whl --force
 ```
 
 ### Optional tools
@@ -172,9 +174,16 @@ To produce a distributable package to send to someone else:
 uv build          # writes .whl and .tar.gz under dist/
 ```
 
-Whoever receives the `.whl` installs it by following steps 1-2-3 above. The
-package carries only Python dependencies; `ffmpeg` and the optional tools are
-still needed on each machine.
+This is useful for installing on a machine without internet access; otherwise
+the other side would rather run `uv tool install pakize`. Whoever receives the
+file installs it by pointing at its path:
+
+```bash
+uv tool install /path/pakize-0.3.0-py3-none-any.whl
+```
+
+The package carries only Python dependencies; `ffmpeg` and the optional tools
+are still needed on each machine.
 
 ## Usage
 
