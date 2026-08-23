@@ -99,7 +99,7 @@ class GoogleTranslator:
 
         params = urllib.parse.urlencode(
             {
-                "client": "gtx",
+                "client": "at",
                 "sl": self.source,
                 "tl": self.target,
                 "dt": "t",
