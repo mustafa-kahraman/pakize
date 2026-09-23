@@ -24,6 +24,7 @@ from .config import (
     set_config_value,
     write_default_config,
 )
+from .asr import AsrError, create_asr_engine
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
 from .pipeline import TranslationError, plan_speech, synthesize
@@ -309,6 +310,49 @@ def narrate_book(
         fg=typer.colors.GREEN,
     )
     typer.echo(_("Oynatma listesi: {path}").format(path=result.playlist))
+
+
+@app.command(help=_("Bir ses dosyasındaki konuşmayı metne çevirir."))
+def transcribe(
+    audio: Path = typer.Argument(..., help=_("Metne çevrilecek ses dosyası.")),
+    output: Path = typer.Option(
+        None, "--output", "-o", help=_("Metnin yazılacağı dosya; yoksa ekrana basar.")
+    ),
+    config_file: Path = typer.Option(
+        None, "--config", help=_("Kullanılacak config dosyası.")
+    ),
+) -> None:
+    """Bir ses dosyasındaki konuşmayı metne çevirir.
+
+    Deşifre sunucusunun çalışıyor olması gerekir; adresi config'teki
+    `asr_server_url` ayarından okunur.
+    """
+    if not audio.is_file():
+        typer.secho(
+            _("Ses dosyası bulunamadı: {path}").format(path=audio),
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    config = load_config(config_file)
+    try:
+        engine = create_asr_engine(config.asr_engine, config)
+        text = engine.transcribe(audio)
+    except AsrError as error:
+        typer.secho(str(error), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from error
+
+    if not text:
+        typer.secho(_("Kayıtta konuşma bulunamadı."), fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(code=1)
+
+    if output is None:
+        typer.echo(text)
+        return
+
+    output.write_text(text + "\n", encoding="utf-8")
+    typer.secho(_("Hazır: {path}").format(path=output), fg=typer.colors.GREEN)
 
 
 @app.command(

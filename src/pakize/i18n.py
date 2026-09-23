@@ -429,6 +429,51 @@ _EN: dict[str, str] = {
     "olabilir; biraz sonra tekrar dene. ({error})":
         "Could not reach the translation service. The free endpoint may have "
         "temporarily blocked us; try again later. ({error})",
+    # --- konuşmayı metne çevirme ---
+    "Bir ses dosyasındaki konuşmayı metne çevirir.":
+        "Transcribes the speech in an audio file.",
+    "Metne çevrilecek ses dosyası.": "The audio file to transcribe.",
+    "Metnin yazılacağı dosya; yoksa ekrana basar.":
+        "File to write the text to; prints to the screen if omitted.",
+    "Kullanılacak config dosyası.": "The config file to use.",
+    "Ses dosyası bulunamadı: {path}": "Audio file not found: {path}",
+    "Kayıtta konuşma bulunamadı.": "No speech found in the recording.",
+    "Deşifre için sunucu adresi gerekli. Config'e ekle:\n"
+    '  asr_server_url = "http://127.0.0.1:8099"':
+        "Transcription needs a server address. Add it to the config:\n"
+        '  asr_server_url = "http://127.0.0.1:8099"',
+    "Bilinmeyen deşifre motoru: {name!r} (tanınanlar: {known})":
+        "Unknown transcription engine: {name!r} (known: {known})",
+    "Tanınmayan ses biçimi: {suffix} (tanınanlar: {known})":
+        "Unrecognised audio format: {suffix} (known: {known})",
+    "Ses dosyası okunamadı: {path} ({reason})":
+        "Could not read the audio file: {path} ({reason})",
+    "Deşifre sunucusu beklenmedik bir yanıt döndürdü.":
+        "The transcription server returned an unexpected response.",
+    "Deşifre sunucusu geçerli JSON döndürmedi.":
+        "The transcription server did not return valid JSON.",
+    "Deşifre sunucusu {code} döndü: {detail}":
+        "The transcription server returned {code}: {detail}",
+    "Deşifre sunucusuna ulaşılamadı ({url}): {reason}":
+        "Could not reach the transcription server ({url}): {reason}",
+    "Deşifre sunucusu yanıt vermedi ({url}): {reason}":
+        "The transcription server did not respond ({url}): {reason}",
+    # --- config açıklamaları ---
+    "konuşmayı metne çeviren motor": "the speech-to-text engine",
+    "deşifre sunucusunun adresi; boşsa deşifre kapalı":
+        "address of the transcription server; empty means transcription is off",
+    "terimleri cümle içinde anlatan paragraf; çıplak liste işe yaramaz":
+        "a paragraph using the terms in sentences; a bare word list does not help",
+    '# Deşifre çıktısında düzeltilecek yazımlar: "yanlış" = "doğru"':
+        '# Spellings to fix in the transcript: "wrong" = "right"',
+    "# Yalnız bütün kelime eşleşir; büyük-küçük harf ayrı sayılır.":
+        "# Only whole words match; upper and lower case are distinct.",
+    "[asr_replacements] içinde boş anahtar var.":
+        "[asr_replacements] contains an empty key.",
+    "[asr_replacements] içinde {key!r} için metin bekleniyor.":
+        "[asr_replacements] expects text for {key!r}.",
+    "bir deşifre isteğinin azami süresi (saniye)":
+        "maximum duration of a transcription request (seconds)",
 }
 """Türkçe → İngilizce kataloğu.
 

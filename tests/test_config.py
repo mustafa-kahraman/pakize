@@ -178,3 +178,47 @@ def test_set_yol_ayarini_dizgi_olarak_yazar(tmp_path):
 
     # Okurken `~` genişletilir; dosyada verildiği gibi durur.
     assert load_config(path).piper_model == Path.home() / "modeller" / "tr.onnx"
+
+
+def test_asr_baglami_serbest_metin_olarak_okunur(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'asr_context = """\nPakize\'yi uv ile kuruyorum.\nPiper var.\n"""\n',
+        encoding="utf-8",
+    )
+
+    assert load_config(path).asr_context == "Pakize'yi uv ile kuruyorum.\nPiper var.\n"
+
+
+def test_duzeltme_tablosu_okunur(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[asr_replacements]\n"Yuvı" = "uv"\n"Ecdi TTS" = "edge-tts"\n',
+        encoding="utf-8",
+    )
+
+    assert load_config(path).asr_replacements == {"Yuvı": "uv", "Ecdi TTS": "edge-tts"}
+
+
+def test_duzeltme_tablosunda_metin_olmayan_deger_reddedilir(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text("[asr_replacements]\nuv = 1\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="metin bekleniyor"):
+        load_config(path)
+
+
+def test_duzeltme_tablosunda_bos_anahtar_reddedilir(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('[asr_replacements]\n"" = "uv"\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="boş anahtar"):
+        load_config(path)
+
+
+def test_asr_baglami_set_ile_yazilir(tmp_path):
+    path = tmp_path / "config.toml"
+
+    set_config_value("asr_context", "Seslendirmede Piper var.", path)
+
+    assert load_config(path).asr_context == "Seslendirmede Piper var."

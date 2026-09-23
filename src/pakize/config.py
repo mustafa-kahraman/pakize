@@ -98,6 +98,34 @@ class Config:
     piper_binary: Path | None = None
     """Piper çalıştırılabilirinin yolu; None ise PATH üzerinden aranır."""
 
+    asr_engine: str = "qwen"
+    """Konuşmayı metne çeviren motor."""
+
+    asr_server_url: str | None = None
+    """Deşifre sunucusunun adresi; None ise deşifre kullanılamaz."""
+
+    asr_context: str | None = None
+    """Tanımaya arka plan bilgisi veren serbest metin; None ise bağlam yok.
+
+    Terimleri cümle içinde anlatan bir paragraf olmalı: Türkçede çıplak kelime
+    listesi tanımayı ölçülebilir biçimde değiştirmiyor, terimi kullanım
+    yeriyle anlatan cümle değiştiriyor.
+    """
+
+    asr_replacements: dict[str, str] = field(default_factory=dict)
+    """Deşifre çıktısına uygulanan düzeltme tablosu: yanlış yazım → doğrusu.
+
+    Bağlamla bile tutmayan kelimeler için (`uv`, `EPUB` gibi). Model devreye
+    girmez; aynı çıktı her seferinde aynı biçimde düzelir.
+    """
+
+    asr_timeout: float = 300.0
+    """Bir deşifre isteğinin azami süresi (saniye).
+
+    Deşifre uzun sürebilir: uzun kayıtlarda gerçek zamanın birkaç katı.
+    Cömert bir üst sınır, yarıda kesilmiş bir kayıttan iyidir.
+    """
+
     def rate_percent(self) -> str:
         """Hız çarpanını edge-tts'in beklediği `+15%` biçimine çevirir.
 
@@ -155,6 +183,10 @@ _SCALAR_FIELDS: dict[str, type] = {
     "stream": bool,
     "translate_to": str,
     "translate_from": str,
+    "asr_engine": str,
+    "asr_server_url": str,
+    "asr_context": str,
+    "asr_timeout": float,
 }
 """Config dosyasında tanınan düz ayarlar ve tipleri."""
 
@@ -177,6 +209,10 @@ def _apply_overrides(base: Config, data: dict) -> Config:
     if isinstance(policy_table, dict):
         overrides["policy"] = _merge_policy(base.policy, policy_table)
 
+    replacements_table = data.get("asr_replacements")
+    if isinstance(replacements_table, dict):
+        overrides["asr_replacements"] = _read_replacements(replacements_table)
+
     return replace(base, **overrides)
 
 
@@ -196,6 +232,10 @@ _FIELD_NOTES: dict[str, str] = {
     "translate_from": "kaynak dil; auto ise servis kendisi tespit eder",
     "piper_model": "Piper ses modelinin (.onnx) yolu",
     "piper_binary": "piper çalıştırılabiliri; boşsa PATH'te aranır",
+    "asr_engine": "konuşmayı metne çeviren motor",
+    "asr_server_url": "deşifre sunucusunun adresi; boşsa deşifre kapalı",
+    "asr_context": "terimleri cümle içinde anlatan paragraf; çıplak liste işe yaramaz",
+    "asr_timeout": "bir deşifre isteğinin azami süresi (saniye)",
 }
 """Üretilen config dosyasındaki açıklama satırları.
 
@@ -252,6 +292,14 @@ def render_default_config() -> str:
         line = f'{segment_type.value} = "{action.value}"'
         lines.append(_with_comment(line, _(description)))
 
+    lines += [
+        "",
+        "[asr_replacements]",
+        _("# Deşifre çıktısında düzeltilecek yazımlar: \"yanlış\" = \"doğru\""),
+        _("# Yalnız bütün kelime eşleşir; büyük-küçük harf ayrı sayılır."),
+        '# "Yuvı" = "uv"',
+    ]
+
     return "\n".join(lines) + "\n"
 
 
@@ -272,6 +320,8 @@ _EXAMPLE_VALUES: dict[str, object] = {
     "translate_to": "tr",
     "piper_model": "~/.local/share/piper/tr_TR-dfki-medium.onnx",
     "piper_binary": "~/.local/bin/piper",
+    "asr_server_url": "http://127.0.0.1:8099",
+    "asr_context": "Pakize'yi uv ile kuruyorum; seslendirmede edge-tts ve Piper var.",
 }
 """Varsayılanı tanımsız olan ayarlar için yorumda gösterilecek örnek değerler."""
 
@@ -413,3 +463,24 @@ def _merge_policy(
                 ).format(type=raw_type, action=raw_action)
             ) from exc
     return merged
+
+
+def _read_replacements(table: dict) -> dict[str, str]:
+    """Config'teki `[asr_replacements]` tablosunu okur.
+
+    Dizge olmayan değer sessizce `str`'e çevrilmez: `uv = 1` gibi bir yazım
+    hatası metne "1" basardı. Boş anahtar da reddedilir; hiçbir şeyle eşleşmez,
+    kullanıcı neden çalışmadığını anlayamazdı.
+    """
+    replacements: dict[str, str] = {}
+    for wrong, right in table.items():
+        if not wrong.strip():
+            raise ValueError(_("[asr_replacements] içinde boş anahtar var."))
+        if not isinstance(right, str):
+            raise ValueError(
+                _("[asr_replacements] içinde {key!r} için metin bekleniyor.").format(
+                    key=wrong
+                )
+            )
+        replacements[wrong] = right
+    return replacements
