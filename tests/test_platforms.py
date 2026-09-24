@@ -92,3 +92,16 @@ def test_windows_yolu_gecerli_toml_uretir():
     okunan = config_modulu.tomllib.loads(satir)
 
     assert okunan["output_dir"] == windows_yolu
+
+
+def test_onbellek_dizini_xdg_degiskenine_uyar(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+
+    assert platforms.cache_home() == tmp_path
+
+
+def test_onbellek_dizini_varsayilani_ev_dizininde(monkeypatch):
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setattr(platforms, "IS_WINDOWS", False)
+
+    assert platforms.cache_home() == Path.home() / ".cache"

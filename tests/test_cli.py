@@ -591,3 +591,52 @@ def test_ilk_kurulum_ipucu_config_varsa_susar(cikti_dizini, config_dosyasi, tmp_
 
     assert sonuc.exit_code == 0
     assert "pakize setup" not in sonuc.stderr
+
+
+@pytest.fixture
+def rate_limited(cikti_dizini, monkeypatch) -> list[Path]:
+    """Çeviri kısıtlamasını taklit eder; çalınan uyarıları kaydeder."""
+    from pakize.translate import TranslationRateLimited
+
+    def limited_synthesize(text, destination, config, progress=None, on_part_ready=None):
+        raise TranslationRateLimited("HTTP 429")
+
+    played: list[Path] = []
+    notice = Path("uyari.mp3")
+    monkeypatch.setattr(cli, "synthesize", limited_synthesize)
+    monkeypatch.setattr(cli.notices, "rate_limit_notice", lambda config: notice)
+    monkeypatch.setattr(cli.audio, "play", played.append)
+    monkeypatch.setattr(cli.runtime, "register", lambda pid: None)
+    monkeypatch.setattr(cli.runtime, "clear", lambda pid: None)
+    return played
+
+
+def test_ceviri_kisitlaninca_uyari_sesi_calinir(rate_limited):
+    sonuc = runner.invoke(cli.app, ["speak", "--translate", "tr"], input="Hello.\n")
+
+    assert sonuc.exit_code == 1
+    assert rate_limited == [Path("uyari.mp3")]
+
+
+def test_calma_kapaliyken_uyari_sesi_calinmaz(rate_limited):
+    sonuc = runner.invoke(
+        cli.app, ["speak", "--translate", "tr", "--no-play"], input="Hello.\n"
+    )
+
+    assert sonuc.exit_code == 1
+    assert rate_limited == []
+
+
+def test_uyari_uretilemezse_asil_hata_yine_gosterilir(rate_limited, monkeypatch):
+    from pakize.engines import EngineError
+
+    def broken(config):
+        raise EngineError("edge-tts yok")
+
+    monkeypatch.setattr(cli.notices, "rate_limit_notice", broken)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--translate", "tr"], input="Hello.\n")
+
+    assert sonuc.exit_code == 1
+    assert "HTTP 429" in sonuc.output
+    assert "Uyarı sesi çalınamadı" in sonuc.output

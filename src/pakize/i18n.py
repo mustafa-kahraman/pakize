@@ -433,6 +433,12 @@ _EN: dict[str, str] = {
     "Tekrar denemek kısıtlamayı uzatır; bir süre sonra dene.":
         "The translation service has rate-limited this connection for now "
         "(HTTP 429). Retrying extends the limit; try again later.",
+    "Çeviri şu an kullanılamıyor. Google kısa bir süreliğine sınır koydu. "
+    "Birkaç dakika bekleyip tekrar dene; hemen denersen bekleme uzar.":
+        "Translation is unavailable right now. Google has set a temporary "
+        "limit. Wait a few minutes and try again; retrying right away makes "
+        "the wait longer.",
+    "Uyarı sesi çalınamadı: {error}": "Could not play the warning sound: {error}",
     # --- konuşmayı metne çevirme ---
     "Bir ses dosyasındaki konuşmayı metne çevirir.":
         "Transcribes the speech in an audio file.",

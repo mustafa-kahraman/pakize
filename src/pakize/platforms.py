@@ -41,6 +41,24 @@ def config_home() -> Path:
     return Path.home() / ".config"
 
 
+def cache_home() -> Path:
+    """Silinse de yeniden üretilebilen dosyaların kök dizini.
+
+    `XDG_CACHE_HOME` her platformda önceliklidir. macOS'ta `config_home` ile
+    aynı gerekçeyle `~/Library/Caches` yerine `~/.cache` seçildi.
+    """
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    if xdg:
+        return Path(xdg)
+
+    if IS_WINDOWS:
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            return Path(local)
+
+    return Path.home() / ".cache"
+
+
 def temp_root() -> Path:
     """Geçici çıktıların kök dizini.
 

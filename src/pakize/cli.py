@@ -16,7 +16,7 @@ from pathlib import Path
 
 import typer
 
-from . import audio, book, runtime
+from . import audio, book, notices, runtime
 from .config import (
     Config,
     config_path,
@@ -38,7 +38,7 @@ from .sources import (
 )
 from . import i18n
 from .i18n import _
-from .translate import GoogleTranslator
+from .translate import GoogleTranslator, TranslationRateLimited
 
 app = typer.Typer(
     help=_("Metni ses dosyasına çevirir; kod bloklarını okumaz."),
@@ -174,6 +174,8 @@ def speak(
             fg=typer.colors.RED,
             err=True,
         )
+        if play and isinstance(exc, TranslationRateLimited):
+            _announce_rate_limit(config)
         raise typer.Exit(code=1) from exc
     except audio.AudioError as exc:
         typer.secho(
@@ -946,6 +948,26 @@ def _report(affected: int, total: int, success: str, empty_message: str) -> None
         else ""
     )
     typer.secho(f"{success}.{suffix}", fg=typer.colors.GREEN)
+
+
+def _announce_rate_limit(config: Config) -> None:
+    """Çeviri kısıtlamasını sesle bildirir.
+
+    Kısayoldan çalışırken ekrandaki hata görünmez; uyarı gelmezse kullanıcı
+    tekrar tekrar dener ve kısıtlama uzar. Uyarı çalınamazsa asıl hatanın
+    önüne geçmez, yalnızca bir not düşülür.
+    """
+    try:
+        with _stoppable(True):
+            audio.play(notices.rate_limit_notice(config))
+    except KeyboardInterrupt:
+        return
+    except (EngineError, audio.AudioError, OSError) as exc:
+        typer.secho(
+            _("Uyarı sesi çalınamadı: {error}").format(error=exc),
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
 
 
 @contextlib.contextmanager
