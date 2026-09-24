@@ -429,6 +429,10 @@ _EN: dict[str, str] = {
     "olabilir; biraz sonra tekrar dene. ({error})":
         "Could not reach the translation service. The free endpoint may have "
         "temporarily blocked us; try again later. ({error})",
+    "Çeviri servisi bu bağlantıyı şimdilik kısıtladı (HTTP 429). "
+    "Tekrar denemek kısıtlamayı uzatır; bir süre sonra dene.":
+        "The translation service has rate-limited this connection for now "
+        "(HTTP 429). Retrying extends the limit; try again later.",
     # --- konuşmayı metne çevirme ---
     "Bir ses dosyasındaki konuşmayı metne çevirir.":
         "Transcribes the speech in an audio file.",

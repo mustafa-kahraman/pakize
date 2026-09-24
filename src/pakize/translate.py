@@ -9,9 +9,13 @@
   gibi bizim ürettiğimiz Türkçe anonslar tekrar çevrilmesin.
 
 Google'ın ücretsiz ucu resmî bir API değildir: kota belirsizdir ve çok sayıda
-istekte geçici olarak engellenebilir. Bu yüzden istekler seri gönderilir,
-aralarında kısa bir bekleme olur ve 429 yanıtında artan gecikmeyle tekrar
-denenir.
+istekte geçici olarak engellenebilir. Bu yüzden istekler seri gönderilir ve
+aralarında kısa bir bekleme olur.
+
+Kısıtlama `client` değerine göre ayrı tutuluyor: biri 429 dönerken diğeri
+çalışabiliyor. 429 alınca aynı değerle beklenip tekrar denenmez — kısıtlama
+dakikalarca sürer, ısrar etmek yalnızca engeli uzatır — sıradaki değere
+geçilir. Hepsi kısıtlıysa `TranslationRateLimited` fırlatılır.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Sequence
 
 from .i18n import _
@@ -43,12 +47,25 @@ TRANSLATABLE = frozenset(
 )
 """Çevrilen segment tipleri. Kod, tablo ve bağlantılar dışarıda kalır."""
 
+CLIENTS = ("dict-chrome-ex", "at", "gtx")
+"""Sırayla denenen `client` değerleri; hepsi aynı yanıt şemasını döner.
+
+`gtx` neredeyse her açık kaynak çeviri kütüphanesinin kullandığı değer
+olduğundan en yoğun kısıtlanan kovadır; bu yüzden sonda durur.
+"""
+
 MAX_ATTEMPTS = 4
+"""Ağ hatası ve 503 için aynı `client` ile yapılacak azami deneme."""
+
 RETRY_BASE_SECONDS = 2.0
 
 
 class TranslationError(RuntimeError):
     """Çeviri yapılamadığında oluşan, kullanıcıya gösterilebilir hata."""
+
+
+class TranslationRateLimited(TranslationError):
+    """Tüm `client` değerleri 429 döndü; bir süre tekrar denenmemeli."""
 
 
 @dataclass
@@ -67,6 +84,13 @@ class GoogleTranslator:
 
     detected: str | None = None
     """Son istekte tespit edilen kaynak dil."""
+
+    _client_index: int = field(default=0, init=False, repr=False)
+    """Çalıştığı görülen `client` değerinin `CLIENTS` içindeki yeri.
+
+    Kısıtlanan değere aynı çalıştırmada geri dönülmez: kitapta yüzlerce
+    istek var, her biri için önce kısıtlı değeri denemek engeli uzatırdı.
+    """
 
     def translate_lines(self, lines: Sequence[str]) -> list[str]:
         """Satırları sırayı ve sayıyı koruyarak çevirir."""
@@ -97,20 +121,11 @@ class GoogleTranslator:
         if not text.strip():
             return text
 
-        params = urllib.parse.urlencode(
-            {
-                "client": "at",
-                "sl": self.source,
-                "tl": self.target,
-                "dt": "t",
-                "q": text,
-            }
-        )
-        request = urllib.request.Request(
-            f"{ENDPOINT}?{params}", headers={"User-Agent": USER_AGENT}
-        )
+        if self.pause_seconds:
+            time.sleep(self.pause_seconds)
 
-        data = self._fetch(request)
+        query = {"sl": self.source, "tl": self.target, "dt": "t", "q": text}
+        data = self._fetch_any_client(query)
         try:
             pieces = data[0]
             self.detected = data[2] if len(data) > 2 else None
@@ -120,19 +135,46 @@ class GoogleTranslator:
                 _("Çeviri yanıtı anlaşılamadı: {error}").format(error=exc)
             ) from exc
 
+    def _fetch_any_client(self, query: dict[str, str]):
+        """İsteği çalışan ilk `client` değeriyle gönderir.
+
+        429 dönen değer bir daha denenmez; sıradakine hemen geçilir.
+        """
+        while self._client_index < len(CLIENTS):
+            params = urllib.parse.urlencode(
+                {"client": CLIENTS[self._client_index], **query}
+            )
+            request = urllib.request.Request(
+                f"{ENDPOINT}?{params}", headers={"User-Agent": USER_AGENT}
+            )
+            try:
+                return self._fetch(request)
+            except _RateLimited:
+                self._client_index += 1
+
+        raise TranslationRateLimited(
+            _(
+                "Çeviri servisi bu bağlantıyı şimdilik kısıtladı (HTTP 429). "
+                "Tekrar denemek kısıtlamayı uzatır; bir süre sonra dene."
+            )
+        )
+
     def _fetch(self, request: urllib.request.Request):
-        """İsteği gönderir; hız sınırında artan gecikmeyle tekrar dener."""
+        """İsteği gönderir; ağ hatası ve 503'te artan gecikmeyle tekrar dener.
+
+        429'da `_RateLimited` fırlatır: beklemek o `client` için işe yaramaz.
+        """
         last_error: Exception | None = None
 
         for attempt in range(MAX_ATTEMPTS):
-            if self.pause_seconds and attempt == 0:
-                time.sleep(self.pause_seconds)
             try:
                 with urllib.request.urlopen(request, timeout=20) as response:
                     return json.load(response)
             except urllib.error.HTTPError as exc:
                 last_error = exc
-                if exc.code not in (429, 503):
+                if exc.code == 429:
+                    raise _RateLimited from exc
+                if exc.code != 503:
                     raise TranslationError(
                         _("Çeviri servisi hata verdi (HTTP {code})").format(
                             code=exc.code
@@ -149,6 +191,10 @@ class GoogleTranslator:
                 "engellemiş olabilir; biraz sonra tekrar dene. ({error})"
             ).format(error=last_error)
         )
+
+
+class _RateLimited(Exception):
+    """Tek bir `client` değeri 429 döndü; dışarı sızmaz."""
 
 
 def translate_segments(

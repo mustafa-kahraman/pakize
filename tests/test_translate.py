@@ -12,8 +12,10 @@ import pytest
 from pakize import translate as translate_modulu
 from pakize.models import Segment, SegmentType
 from pakize.translate import (
+    CLIENTS,
     GoogleTranslator,
     TranslationError,
+    TranslationRateLimited,
     translate_segments,
 )
 
@@ -48,21 +50,29 @@ def servis(monkeypatch):
         def __exit__(self, *args):
             return False
 
+    clients: list[str] = []
+    sleeps: list[float] = []
+
     def sahte_urlopen(request, timeout=None):
+        import urllib.parse
+
+        sorgu = urllib.parse.parse_qs(urllib.parse.urlparse(request.full_url).query)
+        clients.append(sorgu["client"][0])
         if ayar["hatalar"]:
             hata = ayar["hatalar"].pop(0)
             if hata is not None:
                 raise hata
-        import urllib.parse
-
-        sorgu = urllib.parse.urlparse(request.full_url).query
-        metin = urllib.parse.parse_qs(sorgu)["q"][0]
+        metin = sorgu["q"][0]
         kayit.append(metin)
         return SahteYanit(_yanit(ayar["cevirici"](metin), ayar["detected"]))
 
     monkeypatch.setattr(translate_modulu.urllib.request, "urlopen", sahte_urlopen)
-    monkeypatch.setattr(translate_modulu.time, "sleep", lambda saniye: None)
-    return type("Kurulum", (), {"kayit": kayit, "ayar": ayar})
+    monkeypatch.setattr(translate_modulu.time, "sleep", sleeps.append)
+    return type(
+        "Kurulum",
+        (),
+        {"kayit": kayit, "ayar": ayar, "clients": clients, "sleeps": sleeps},
+    )
 
 
 @pytest.fixture
@@ -114,13 +124,49 @@ def test_bos_satir_aga_cikmaz(translator, servis):
     assert servis.kayit == []
 
 
-def test_hiz_sinirinda_tekrar_denenir(translator, servis):
+def _too_many() -> urllib.error.HTTPError:
+    return urllib.error.HTTPError("u", 429, "Too Many", {}, None)
+
+
+def test_hiz_sinirinda_beklemeden_siradaki_istemciye_gecilir(translator, servis):
+    servis.ayar["hatalar"] = [_too_many(), None]
+
+    assert translator.translate_lines(["Hello"]) == ["[Hello]"]
+    assert servis.clients == [CLIENTS[0], CLIENTS[1]]
+    assert servis.sleeps == []
+
+
+def test_kisitlanan_istemciye_ayni_calistirmada_donulmez(translator, servis):
+    servis.ayar["hatalar"] = [_too_many(), None]
+
+    translator.translate_lines(["Hello"])
+    translator.translate_lines(["World"])
+
+    assert servis.clients == [CLIENTS[0], CLIENTS[1], CLIENTS[1]]
+
+
+def test_tum_istemciler_kisitliysa_tekrar_denenmez(translator, servis):
+    servis.ayar["hatalar"] = [_too_many() for _ in CLIENTS]
+
+    with pytest.raises(TranslationRateLimited, match="429"):
+        translator.translate_lines(["Hello"])
+
+    assert servis.clients == list(CLIENTS)
+    assert servis.sleeps == []
+
+
+def test_hiz_siniri_hatasi_bir_ceviri_hatasidir():
+    assert issubclass(TranslationRateLimited, TranslationError)
+
+
+def test_gecici_sunucu_hatasinda_ayni_istemciyle_tekrar_denenir(translator, servis):
     servis.ayar["hatalar"] = [
-        urllib.error.HTTPError("u", 429, "Too Many", {}, None),
+        urllib.error.HTTPError("u", 503, "Unavailable", {}, None),
         None,
     ]
 
     assert translator.translate_lines(["Hello"]) == ["[Hello]"]
+    assert servis.clients == [CLIENTS[0], CLIENTS[0]]
 
 
 def test_kalici_hata_tekrar_denenmez(translator, servis):
