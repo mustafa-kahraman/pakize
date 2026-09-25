@@ -11,9 +11,11 @@ kontrolünü taşır, biri güncellenirken diğeri unutulurdu.
 from __future__ import annotations
 
 import os
+import signal
 import sys
 import tempfile
 from pathlib import Path
+from typing import Callable
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
@@ -57,6 +59,40 @@ def cache_home() -> Path:
             return Path(local)
 
     return Path.home() / ".cache"
+
+
+def die_with_parent() -> Callable[[], None] | None:
+    """Alt sürecin, onu başlatan süreç ölünce kendiliğinden kapanmasını sağlar.
+
+    `subprocess.Popen(preexec_fn=...)` için bir işlev döner. Linux'ta
+    çekirdeğin `PR_SET_PDEATHSIG` ayarını kullanır: Pakize `kill -9` ile
+    öldürülse bile alt süreç SIGTERM alır. Pakize'nin normal yolları alt
+    süreci zaten kapatır; bu, onların hiç çalışamadığı durumun güvencesidir.
+
+    Başka platformlarda karşılığı yok; None döner. `ctypes`'sız derlenmiş
+    Python'larda da None döner: güvence eksik kalır, Pakize çalışmaya devam
+    eder.
+    """
+    if not sys.platform.startswith("linux"):
+        return None
+
+    try:
+        import ctypes
+
+        # Kütüphane üst süreçte yüklenir; alt süreç fork ile exec arasında
+        # yalnızca çağrıyı yapar, orada dosya aramak riskli olurdu.
+        libc = ctypes.CDLL(None, use_errno=True)
+    except (ImportError, OSError):
+        return None
+
+    def set_parent_death_signal() -> None:
+        libc.prctl(_PR_SET_PDEATHSIG, signal.SIGTERM)
+
+    return set_parent_death_signal
+
+
+_PR_SET_PDEATHSIG = 1
+"""`linux/prctl.h` içindeki sabit."""
 
 
 def temp_root() -> Path:

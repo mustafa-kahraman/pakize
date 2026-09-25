@@ -102,7 +102,20 @@ class Config:
     """Konuşmayı metne çeviren motor."""
 
     asr_server_url: str | None = None
-    """Deşifre sunucusunun adresi; None ise deşifre kullanılamaz."""
+    """Dışarıda çalışan deşifre sunucusunun adresi.
+
+    Doluysa Pakize bu sunucuyu kullanır ve ona dokunmaz. Boşsa ve `asr_model`
+    tanımlıysa Pakize sunucuyu her iş için kendisi başlatıp kapatır.
+    """
+
+    asr_model: Path | None = None
+    """Pakize'nin başlatacağı sunucu için model dosyasının (.gguf) yolu."""
+
+    asr_mmproj: Path | None = None
+    """Modelin ses kodlayıcısının (mmproj .gguf) yolu; `asr_model` ile gerekir."""
+
+    asr_server_binary: Path | None = None
+    """`llama-server` çalıştırılabilirinin yolu; None ise PATH üzerinden aranır."""
 
     asr_context: str | None = None
     """Tanımaya arka plan bilgisi veren serbest metin; None ise bağlam yok.
@@ -190,7 +203,14 @@ _SCALAR_FIELDS: dict[str, type] = {
 }
 """Config dosyasında tanınan düz ayarlar ve tipleri."""
 
-_PATH_FIELDS = ("piper_model", "piper_binary", "output_dir")
+_PATH_FIELDS = (
+    "piper_model",
+    "piper_binary",
+    "output_dir",
+    "asr_model",
+    "asr_mmproj",
+    "asr_server_binary",
+)
 """Dosya yolu tutan ayarlar; okunurken `~` genişletilir."""
 
 
@@ -233,7 +253,10 @@ _FIELD_NOTES: dict[str, str] = {
     "piper_model": "Piper ses modelinin (.onnx) yolu",
     "piper_binary": "piper çalıştırılabiliri; boşsa PATH'te aranır",
     "asr_engine": "konuşmayı metne çeviren motor",
-    "asr_server_url": "deşifre sunucusunun adresi; boşsa deşifre kapalı",
+    "asr_server_url": "dışarıda çalışan deşifre sunucusu; boşsa asr_model ile Pakize başlatır",
+    "asr_model": "deşifre modeli (.gguf); sunucu her iş için açılıp kapanır",
+    "asr_mmproj": "modelin ses kodlayıcısı (mmproj .gguf)",
+    "asr_server_binary": "llama-server çalıştırılabiliri; boşsa PATH'te aranır",
     "asr_context": "terimleri cümle içinde anlatan paragraf; çıplak liste işe yaramaz",
     "asr_timeout": "bir deşifre isteğinin azami süresi (saniye)",
 }
@@ -321,6 +344,9 @@ _EXAMPLE_VALUES: dict[str, object] = {
     "piper_model": "~/.local/share/piper/tr_TR-dfki-medium.onnx",
     "piper_binary": "~/.local/bin/piper",
     "asr_server_url": "http://127.0.0.1:8099",
+    "asr_model": "~/.local/share/pakize/asr/Qwen3-ASR-1.7B-Q8_0.gguf",
+    "asr_mmproj": "~/.local/share/pakize/asr/mmproj-Qwen3-ASR-1.7B-Q8_0.gguf",
+    "asr_server_binary": "~/.local/bin/llama-server",
     "asr_context": "Pakize'yi uv ile kuruyorum; seslendirmede edge-tts ve Piper var.",
 }
 """Varsayılanı tanımsız olan ayarlar için yorumda gösterilecek örnek değerler."""

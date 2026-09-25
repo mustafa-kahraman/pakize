@@ -24,7 +24,7 @@ from .config import (
     set_config_value,
     write_default_config,
 )
-from .asr import AsrError, create_asr_engine
+from .asr import AsrError, asr_server, create_asr_engine
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
 from .pipeline import TranslationError, plan_speech, synthesize
@@ -326,8 +326,8 @@ def transcribe(
 ) -> None:
     """Bir ses dosyasındaki konuşmayı metne çevirir.
 
-    Deşifre sunucusunun çalışıyor olması gerekir; adresi config'teki
-    `asr_server_url` ayarından okunur.
+    Config'te `asr_server_url` varsa o sunucu kullanılır; yoksa Pakize
+    `asr_model` ile sunucuyu başlatır ve iş bitince kapatır.
     """
     if not audio.is_file():
         typer.secho(
@@ -339,8 +339,11 @@ def transcribe(
 
     config = load_config(config_file)
     try:
-        engine = create_asr_engine(config.asr_engine, config)
-        text = engine.transcribe(audio)
+        with asr_server(config) as url:
+            engine = create_asr_engine(
+                config.asr_engine, replace(config, asr_server_url=url)
+            )
+            text = engine.transcribe(audio)
     except AsrError as error:
         typer.secho(str(error), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from error

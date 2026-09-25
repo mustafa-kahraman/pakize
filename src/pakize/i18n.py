@@ -468,10 +468,46 @@ _EN: dict[str, str] = {
         "Could not reach the transcription server ({url}): {reason}",
     "Deşifre sunucusu yanıt vermedi ({url}): {reason}":
         "The transcription server did not respond ({url}): {reason}",
+    "Deşifre için bir sunucu gerekli. Config'e ya model yolunu ekle "
+    "(Pakize sunucuyu kendisi açıp kapatır):\n"
+    '  asr_model = "/yol/model.gguf"\n'
+    '  asr_mmproj = "/yol/mmproj.gguf"\n'
+    "ya da çalışan bir sunucunun adresini:\n"
+    '  asr_server_url = "http://127.0.0.1:8099"':
+        "Transcription needs a server. Add the model path to the config "
+        "(Pakize starts and stops the server itself):\n"
+        '  asr_model = "/path/model.gguf"\n'
+        '  asr_mmproj = "/path/mmproj.gguf"\n'
+        "or the address of a running server:\n"
+        '  asr_server_url = "http://127.0.0.1:8099"',
+    "Model sesi okuyabilmek için ses kodlayıcısına ihtiyaç duyar. "
+    "Config'e ekle:\n"
+    '  asr_mmproj = "/yol/mmproj.gguf"':
+        "The model needs its audio encoder to read audio. Add it to the config:\n"
+        '  asr_mmproj = "/path/mmproj.gguf"',
+    "llama-server bulunamadı. llama.cpp sürümlerinden indirilebilir:\n"
+    "  https://github.com/ggml-org/llama.cpp/releases\n"
+    'Kuruluysa yolunu config\'e yaz: asr_server_binary = "/yol/llama-server"':
+        "llama-server not found. It can be downloaded from the llama.cpp releases:\n"
+        "  https://github.com/ggml-org/llama.cpp/releases\n"
+        'If installed, set its path in the config: asr_server_binary = "/path/llama-server"',
+    "Deşifre sunucusu başlatılamadı: {reason}":
+        "Could not start the transcription server: {reason}",
+    "Deşifre sunucusu açılırken kapandı (çıkış kodu {code}).":
+        "The transcription server exited while starting (exit code {code}).",
+    "Deşifre sunucusu {seconds:.0f} sn içinde hazır olmadı.":
+        "The transcription server was not ready within {seconds:.0f} s.",
+    "{setting} ile gösterilen dosya yok: {path}":
+        "The file set by {setting} does not exist: {path}",
     # --- config açıklamaları ---
     "konuşmayı metne çeviren motor": "the speech-to-text engine",
-    "deşifre sunucusunun adresi; boşsa deşifre kapalı":
-        "address of the transcription server; empty means transcription is off",
+    "dışarıda çalışan deşifre sunucusu; boşsa asr_model ile Pakize başlatır":
+        "an externally run transcription server; if empty, Pakize starts one from asr_model",
+    "deşifre modeli (.gguf); sunucu her iş için açılıp kapanır":
+        "transcription model (.gguf); the server starts and stops for each job",
+    "modelin ses kodlayıcısı (mmproj .gguf)": "the model's audio encoder (mmproj .gguf)",
+    "llama-server çalıştırılabiliri; boşsa PATH'te aranır":
+        "llama-server executable; searched on PATH if empty",
     "terimleri cümle içinde anlatan paragraf; çıplak liste işe yaramaz":
         "a paragraph using the terms in sentences; a bare word list does not help",
     '# Deşifre çıktısında düzeltilecek yazımlar: "yanlış" = "doğru"':
