@@ -180,7 +180,7 @@ taraf `uv tool install pakize` demeyi tercih eder. Dosyayı alan kişi, yolunu
 vererek kurar:
 
 ```bash
-uv tool install /yol/pakize-0.3.0-py3-none-any.whl
+uv tool install /yol/pakize-0.4.0-py3-none-any.whl
 ```
 
 Paket yalnızca Python bağımlılıklarını taşır; `ffmpeg` ve isteğe bağlı araçlar

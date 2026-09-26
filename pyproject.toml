@@ -1,7 +1,7 @@
 [project]
 name = "pakize"
-version = "0.3.0"
-description = "Metni ses dosyasına çeviren, kod bloklarını okumayan yerel TTS aracı"
+version = "0.4.0"
+description = "Metni sese, sesi metne çeviren yerel komut satırı aracı; kod bloklarını okumaz"
 readme = "README.en.md"
 authors = [
     { name = "Mustafa Kahraman" }
@@ -19,6 +19,9 @@ keywords = [
     "edge-tts",
     "piper",
     "accessibility",
+    "speech-to-text",
+    "dictation",
+    "asr",
 ]
 # Lisans burada SPDX ifadesiyle verildiği için ayrıca "License ::" sınıflandırıcısı
 # yazılmaz; ikisi bir arada olursa PyPI paketi reddeder.
