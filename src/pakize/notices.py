@@ -36,6 +36,16 @@ def rate_limit_notice(config: Config) -> Path:
     return _cached_notice("rate-limit", text, config)
 
 
+def dictation_notice(message: str, config: Config) -> Path:
+    """Dikte hatasını okuyan ses dosyasını döner; yoksa üretir.
+
+    Dikte tümüyle kısayoldan yürür; hatanın tek görünür yeri sestir. Mesaj
+    olduğu gibi okunur: konuşan kullanıcı "model bulunamadı" ile "pano yok"
+    arasındaki farkı duymalı. Aynı mesaj ikinci kez üretilmez.
+    """
+    return _cached_notice("dictate", message, config)
+
+
 def _cached_notice(name: str, text: str, config: Config) -> Path:
     """Uyarıyı önbellekten döner; yoksa seslendirip önbelleğe yazar.
 

@@ -139,6 +139,33 @@ class Config:
     Cömert bir üst sınır, yarıda kesilmiş bir kayıttan iyidir.
     """
 
+    dictate_microphone: str | None = None
+    """Diktede kayıt yapılacak mikrofon, ffmpeg'in `biçim:aygıt` yazımıyla.
+
+    None ise platformun varsayılan aygıtı kullanılır (Linux'ta `pulse:default`,
+    macOS'ta `avfoundation::0`). Windows'ta varsayılan yoktur; `dshow:audio=Ad`
+    biçiminde yazılması gerekir.
+    """
+
+    dictate_max_seconds: float = 300.0
+    """Bir diktenin azami kayıt süresi (saniye); emniyet supabı.
+
+    İkinci basış unutulursa mikrofon sonsuza dek açık kalmaz: süre dolunca
+    kayıt kendiliğinden biter ve o ana kadarki konuşma deşifre edilir.
+    """
+
+    dictate_start_sound: Path | None = None
+    """Kayıt başlarken çalınacak ses dosyası; None ise üretilen ton."""
+
+    dictate_stop_sound: Path | None = None
+    """Kayıt bitince çalınacak ses dosyası; None ise üretilen ton."""
+
+    dictate_done_sound: Path | None = None
+    """Metin panoya konunca çalınacak ses dosyası; None ise üretilen ton."""
+
+    dictate_error_sound: Path | None = None
+    """Dikte başarısız olunca çalınacak ses dosyası; None ise üretilen ton."""
+
     def rate_percent(self) -> str:
         """Hız çarpanını edge-tts'in beklediği `+15%` biçimine çevirir.
 
@@ -200,6 +227,8 @@ _SCALAR_FIELDS: dict[str, type] = {
     "asr_server_url": str,
     "asr_context": str,
     "asr_timeout": float,
+    "dictate_microphone": str,
+    "dictate_max_seconds": float,
 }
 """Config dosyasında tanınan düz ayarlar ve tipleri."""
 
@@ -210,6 +239,10 @@ _PATH_FIELDS = (
     "asr_model",
     "asr_mmproj",
     "asr_server_binary",
+    "dictate_start_sound",
+    "dictate_stop_sound",
+    "dictate_done_sound",
+    "dictate_error_sound",
 )
 """Dosya yolu tutan ayarlar; okunurken `~` genişletilir."""
 
@@ -259,6 +292,12 @@ _FIELD_NOTES: dict[str, str] = {
     "asr_server_binary": "llama-server çalıştırılabiliri; boşsa PATH'te aranır",
     "asr_context": "terimleri cümle içinde anlatan paragraf; çıplak liste işe yaramaz",
     "asr_timeout": "bir deşifre isteğinin azami süresi (saniye)",
+    "dictate_microphone": "dikte mikrofonu, ffmpeg biçim:aygıt yazımıyla; boşsa sistem varsayılanı",
+    "dictate_max_seconds": "bir diktenin azami kayıt süresi (saniye)",
+    "dictate_start_sound": "kayıt başlarken çalınan ses; boşsa üretilen ton",
+    "dictate_stop_sound": "kayıt bitince çalınan ses; boşsa üretilen ton",
+    "dictate_done_sound": "metin panoya konunca çalınan ses; boşsa üretilen ton",
+    "dictate_error_sound": "dikte başarısız olunca çalınan ses; boşsa üretilen ton",
 }
 """Üretilen config dosyasındaki açıklama satırları.
 
@@ -348,6 +387,11 @@ _EXAMPLE_VALUES: dict[str, object] = {
     "asr_mmproj": "~/.local/share/pakize/asr/mmproj-Qwen3-ASR-1.7B-Q8_0.gguf",
     "asr_server_binary": "~/.local/bin/llama-server",
     "asr_context": "Pakize'yi uv ile kuruyorum; seslendirmede edge-tts ve Piper var.",
+    "dictate_microphone": "pulse:default",
+    "dictate_start_sound": "~/Music/sounds/start.mp3",
+    "dictate_stop_sound": "~/Music/sounds/stop.mp3",
+    "dictate_done_sound": "~/Music/sounds/done.mp3",
+    "dictate_error_sound": "~/Music/sounds/error.mp3",
 }
 """Varsayılanı tanımsız olan ayarlar için yorumda gösterilecek örnek değerler."""
 

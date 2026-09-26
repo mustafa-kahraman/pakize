@@ -189,3 +189,17 @@ def test_ulasilamayan_surec_agaci_bos_liste_doner(monkeypatch):
 
     assert runtime._players(4242) == []
     assert runtime._is_pakize(4242) is False
+
+
+def test_dikte_kaydi_calma_kaydindan_ayri_tutulur(pakize_surecleri):
+    pakize_surecleri(11, 22)
+    runtime.register(11)
+    runtime.register(22, runtime.DICTATION_STATE_NAME)
+
+    assert runtime.running_pids() == [11]
+    assert runtime.running_pids(runtime.DICTATION_STATE_NAME) == [22]
+
+    runtime.clear(22, runtime.DICTATION_STATE_NAME)
+
+    assert runtime.running_pids(runtime.DICTATION_STATE_NAME) == []
+    assert runtime.running_pids() == [11]

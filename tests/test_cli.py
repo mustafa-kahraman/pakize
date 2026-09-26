@@ -640,3 +640,90 @@ def test_uyari_uretilemezse_asil_hata_yine_gosterilir(rate_limited, monkeypatch)
     assert sonuc.exit_code == 1
     assert "HTTP 429" in sonuc.output
     assert "Uyarı sesi çalınamadı" in sonuc.output
+
+
+# --- dikte -------------------------------------------------------------------
+
+
+@pytest.fixture
+def dikte(monkeypatch):
+    """Dikte akışını yamalar: kayıt yapılmaz, metin hazır kabul edilir."""
+    state = {"text": "merhaba dünya", "outcome": cli.dictation.StopRequest.NONE,
+             "delivered": [], "announced": [], "clipboard": []}
+
+    def fake_dictate(config, deliver, status=None):
+        deliver(state["text"])
+        return state["text"]
+
+    monkeypatch.setattr(cli.dictation, "request_stop", lambda: state["outcome"])
+    monkeypatch.setattr(cli.dictation, "dictate", fake_dictate)
+    monkeypatch.setattr(
+        cli.dictation,
+        "announce_error",
+        lambda config, message: state["announced"].append(message),
+    )
+    monkeypatch.setattr(cli, "write_clipboard", state["clipboard"].append)
+    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: Config())
+    return state
+
+
+def test_dikte_metni_ekrana_ve_panoya_yazar(dikte):
+    sonuc = runner.invoke(cli.app, ["dictate"])
+
+    assert sonuc.exit_code == 0
+    assert "merhaba dünya" in sonuc.stdout
+    assert dikte["clipboard"] == ["merhaba dünya"]
+
+
+def test_dikte_pano_kapatilabilir(dikte):
+    sonuc = runner.invoke(cli.app, ["dictate", "--no-clipboard"])
+
+    assert sonuc.exit_code == 0
+    assert dikte["clipboard"] == []
+
+
+def test_ikinci_cagri_kaydi_bitirir(dikte):
+    dikte["outcome"] = cli.dictation.StopRequest.REQUESTED
+
+    sonuc = runner.invoke(cli.app, ["dictate"])
+
+    assert sonuc.exit_code == 0
+    assert "Kayıt bitiriliyor" in sonuc.stdout
+    assert dikte["clipboard"] == []
+
+
+def test_desifre_surerken_cagri_bilgi_verir(dikte):
+    dikte["outcome"] = cli.dictation.StopRequest.ALREADY
+
+    sonuc = runner.invoke(cli.app, ["dictate"])
+
+    assert sonuc.exit_code == 0
+    assert "deşifre sürüyor" in sonuc.stdout
+
+
+def test_dikte_hatasi_sesle_bildirilir(dikte, monkeypatch):
+    def failing(config, deliver, status=None):
+        raise cli.dictation.DictationError("Kayıt boş: mikrofondan ses gelmedi.")
+
+    monkeypatch.setattr(cli.dictation, "dictate", failing)
+
+    sonuc = runner.invoke(cli.app, ["dictate"])
+
+    assert sonuc.exit_code == 1
+    assert "ses gelmedi" in sonuc.output
+    assert dikte["announced"] == ["Kayıt boş: mikrofondan ses gelmedi."]
+
+
+def test_pano_yazilamazsa_metin_yine_ekrandadir(dikte, monkeypatch):
+    from pakize.sources import ClipboardError
+
+    def broken(text):
+        raise ClipboardError("xclip yok")
+
+    monkeypatch.setattr(cli, "write_clipboard", broken)
+
+    sonuc = runner.invoke(cli.app, ["dictate"])
+
+    assert sonuc.exit_code == 1
+    assert "merhaba dünya" in sonuc.stdout
+    assert dikte["announced"] == ["xclip yok"]

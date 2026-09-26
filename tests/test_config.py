@@ -222,3 +222,30 @@ def test_asr_baglami_set_ile_yazilir(tmp_path):
     set_config_value("asr_context", "Seslendirmede Piper var.", path)
 
     assert load_config(path).asr_context == "Seslendirmede Piper var."
+
+
+def test_dikte_ayarlari_okunur(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'dictate_microphone = "pulse:default"\n'
+        "dictate_max_seconds = 120\n"
+        'dictate_start_sound = "~/sesler/basla.mp3"\n'
+        'dictate_error_sound = "~/sesler/hata.mp3"\n',
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    assert config.dictate_microphone == "pulse:default"
+    assert config.dictate_max_seconds == 120.0
+    assert config.dictate_start_sound == Path("~/sesler/basla.mp3").expanduser()
+    assert config.dictate_error_sound == Path("~/sesler/hata.mp3").expanduser()
+    assert config.dictate_stop_sound is None
+
+
+def test_dikte_varsayilanlari_ton_uretir_ve_bes_dakikada_keser():
+    config = Config()
+
+    assert config.dictate_microphone is None
+    assert config.dictate_max_seconds == 300.0
+    assert config.dictate_done_sound is None

@@ -255,3 +255,41 @@ def test_config_model_yollarini_okur(tmp_path):
 
     assert config.asr_model == Path("~/m.gguf").expanduser()
     assert config.asr_mmproj == Path("/a/mm.gguf")
+
+
+# --- başlatmadan doğrulama ---------------------------------------------------
+
+
+def test_ayar_dogrulamasi_surec_baslatmaz(model_files, launcher):
+    from pakize.asr import check_asr_setup
+
+    check_asr_setup(model_files)
+
+    assert launcher["processes"] == []
+
+
+def test_ayar_dogrulamasi_dis_sunucuya_dokunmaz(launcher):
+    from pakize.asr import check_asr_setup
+
+    check_asr_setup(replace(Config(), asr_server_url="http://127.0.0.1:8099"))
+
+
+def test_ayar_dogrulamasi_eksik_modeli_soyler():
+    from pakize.asr import check_asr_setup
+
+    with pytest.raises(AsrUnavailable, match="asr_model"):
+        check_asr_setup(Config())
+
+
+def test_ayar_dogrulamasi_eksik_kodlayiciyi_soyler(model_files):
+    from pakize.asr import check_asr_setup
+
+    with pytest.raises(AsrUnavailable, match="asr_mmproj"):
+        check_asr_setup(replace(model_files, asr_mmproj=None))
+
+
+def test_ayar_dogrulamasi_olmayan_dosyayi_soyler(model_files, tmp_path):
+    from pakize.asr import check_asr_setup
+
+    with pytest.raises(AsrUnavailable, match="asr_server_binary"):
+        check_asr_setup(replace(model_files, asr_server_binary=tmp_path / "yok"))

@@ -68,18 +68,7 @@ def asr_server(config: Config) -> Iterator[str]:
         yield config.asr_server_url
         return
 
-    if config.asr_model is None:
-        raise AsrUnavailable(
-            _(
-                "Deşifre için bir sunucu gerekli. Config'e ya model yolunu ekle "
-                "(Pakize sunucuyu kendisi açıp kapatır):\n"
-                '  asr_model = "/yol/model.gguf"\n'
-                '  asr_mmproj = "/yol/mmproj.gguf"\n'
-                "ya da çalışan bir sunucunun adresini:\n"
-                '  asr_server_url = "http://127.0.0.1:8099"'
-            )
-        )
-
+    _require_model(config)
     with _termination_as_exit():
         server = LlamaServer(config)
         server.start()
@@ -87,6 +76,34 @@ def asr_server(config: Config) -> Iterator[str]:
             yield server.url
         finally:
             server.stop()
+
+
+def check_asr_setup(config: Config) -> None:
+    """Sunucuyu başlatmadan, başlatılabileceğini doğrular.
+
+    Dikte, kayda başlamadan önce sorar: kullanıcı iki dakika konuştuktan
+    sonra "model yok" demek yerine, eksik ayar daha ilk saniyede söylenir.
+    Hiçbir süreç açılmaz; yalnız ayarlar ve dosyalar yoklanır.
+    """
+    if config.asr_server_url:
+        return
+    _require_model(config)
+    LlamaServer(config).resolve_paths()
+
+
+def _require_model(config: Config) -> None:
+    if config.asr_model is not None:
+        return
+    raise AsrUnavailable(
+        _(
+            "Deşifre için bir sunucu gerekli. Config'e ya model yolunu ekle "
+            "(Pakize sunucuyu kendisi açıp kapatır):\n"
+            '  asr_model = "/yol/model.gguf"\n'
+            '  asr_mmproj = "/yol/mmproj.gguf"\n'
+            "ya da çalışan bir sunucunun adresini:\n"
+            '  asr_server_url = "http://127.0.0.1:8099"'
+        )
+    )
 
 
 @contextlib.contextmanager
@@ -169,7 +186,11 @@ class LlamaServer:
                 process.wait()
         self._close_log()
 
-    def _command(self) -> list[str]:
+    def resolve_paths(self) -> tuple[str, Path, Path]:
+        """Çalıştırılabilir, model ve ses kodlayıcısının yollarını doğrular.
+
+        Eksik ya da yanlış olan varsa `AsrUnavailable` fırlatır.
+        """
         model = _existing_file(self.config.asr_model, "asr_model")
         if self.config.asr_mmproj is None:
             raise AsrUnavailable(
@@ -180,11 +201,15 @@ class LlamaServer:
                 )
             )
         mmproj = _existing_file(self.config.asr_mmproj, "asr_mmproj")
+        return self._binary(), model, mmproj
+
+    def _command(self) -> list[str]:
+        binary, model, mmproj = self.resolve_paths()
 
         port = _free_port()
         self.url = f"http://{HOST}:{port}"
         return [
-            self._binary(),
+            binary,
             "--model", str(model),
             "--mmproj", str(mmproj),
             "--threads", str(os.cpu_count() or 4),

@@ -520,6 +520,52 @@ _EN: dict[str, str] = {
         "[asr_replacements] expects text for {key!r}.",
     "bir deşifre isteğinin azami süresi (saniye)":
         "maximum duration of a transcription request (seconds)",
+    # --- dikte ---
+    "Konuşmayı kaydedip metne çevirir ve panoya koyar; "
+    "ikinci çağrı kaydı bitirir.":
+        "Records speech, transcribes it and puts the text on the clipboard; "
+        "a second call ends the recording.",
+    "Metni panoya koy.": "Put the text on the clipboard.",
+    "Kayıt bitiriliyor.": "Finishing the recording.",
+    "Kayıt zaten bitti; deşifre sürüyor.":
+        "The recording has already ended; transcription is in progress.",
+    "Kayıt başladı. Bitirmek için komutu tekrar çalıştır (terminalde Ctrl+C).":
+        "Recording. Run the command again to finish (Ctrl+C in a terminal).",
+    "Deşifre ediliyor...": "Transcribing...",
+    "Dikte başarısız oldu.": "Dictation failed.",
+    "dictate_{name}_sound ile gösterilen dosya yok: {path}":
+        "The file set by dictate_{name}_sound does not exist: {path}",
+    "Windows'ta mikrofon adı gerekli. Aygıtları listele:\n"
+    "  ffmpeg -list_devices true -f dshow -i dummy\n"
+    "sonra config'e yaz:\n"
+    '  dictate_microphone = "dshow:audio=Mikrofon (Realtek Audio)"':
+        "Windows needs the microphone's name. List the devices:\n"
+        "  ffmpeg -list_devices true -f dshow -i dummy\n"
+        "then set it in the config:\n"
+        '  dictate_microphone = "dshow:audio=Microphone (Realtek Audio)"',
+    "dictate_microphone 'biçim:aygıt' şeklinde olmalı "
+    "(örn. pulse:default, avfoundation::0): {value!r}":
+        "dictate_microphone must be 'format:device' "
+        "(e.g. pulse:default, avfoundation::0): {value!r}",
+    "Kayıt başlatılamadı: {reason}": "Could not start recording: {reason}",
+    "Kayıt başarısız oldu (ffmpeg çıkış kodu {code}).":
+        "Recording failed (ffmpeg exit code {code}).",
+    "Kayıt boş: mikrofondan ses gelmedi.":
+        "The recording is empty: no audio came from the microphone.",
+    "Panoya yazılamadı — {errors}": "Could not write to the clipboard — {errors}",
+    # --- dikte config açıklamaları ---
+    "dikte mikrofonu, ffmpeg biçim:aygıt yazımıyla; boşsa sistem varsayılanı":
+        "dictation microphone in ffmpeg's format:device form; system default if empty",
+    "bir diktenin azami kayıt süresi (saniye)":
+        "maximum recording length of one dictation (seconds)",
+    "kayıt başlarken çalınan ses; boşsa üretilen ton":
+        "sound played when recording starts; a generated tone if empty",
+    "kayıt bitince çalınan ses; boşsa üretilen ton":
+        "sound played when recording ends; a generated tone if empty",
+    "metin panoya konunca çalınan ses; boşsa üretilen ton":
+        "sound played when the text is on the clipboard; a generated tone if empty",
+    "dikte başarısız olunca çalınan ses; boşsa üretilen ton":
+        "sound played when dictation fails; a generated tone if empty",
 }
 """Türkçe → İngilizce kataloğu.
 

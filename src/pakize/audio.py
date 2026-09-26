@@ -225,6 +225,16 @@ def _play_command(path: Path) -> list[str]:
     ]
 
 
+def ffmpeg_binary() -> str:
+    """ffmpeg'in yolu; kurulu değilse kurulum ipucuyla `AudioError`."""
+    return _require_binary("ffmpeg")
+
+
+def run_ffmpeg(*args: str) -> None:
+    """ffmpeg'i sessiz ve üzerine yazar kipte çalıştırır; hata verirse `AudioError`."""
+    _run([ffmpeg_binary(), "-y", "-hide_banner", "-loglevel", "error", *args])
+
+
 def _quote(path: Path) -> str:
     """Yolu ffmpeg concat demuxer'ının beklediği biçimde tırnaklar.
 

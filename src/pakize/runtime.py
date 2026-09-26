@@ -23,41 +23,48 @@ import psutil
 from .platforms import temp_root
 
 STATE_NAME = "pakize-playing"
+"""Çalan seslendirmelerin kaydı; `pakize stop` ve `pause` buna bakar."""
+
+DICTATION_STATE_NAME = "pakize-dictating"
+"""Süren diktelerin kaydı; ikinci `pakize dictate` çağrısı buna bakar."""
 
 PLAYER_COMM = "ffplay"
 """Çalmayı yürüten sürecin adı (Windows'ta `ffplay.exe` olarak görünür)."""
 
 
-def state_dir() -> Path:
+def state_dir(name: str = STATE_NAME) -> Path:
     """Süreç kayıtlarının tutulduğu dizin.
 
     Her çalan süreç için ayrı bir dosya tutulur. Tek dosya kullanmak, aynı
     anda iki Pakize çaldığında birinin kaydını ezip o sürecin durdurulamaz
     hâle gelmesine yol açıyordu.
+
+    Her kayıt türünün (çalma, dikte) kendi dizini vardır: `pakize stop`
+    süren bir dikteyi, ikinci `pakize dictate` de çalan bir sesi görmez.
     """
     base = os.environ.get("XDG_RUNTIME_DIR")
     root = Path(base) if base else temp_root()
-    return root / STATE_NAME
+    return root / name
 
 
-def register(pid: int) -> None:
-    """Çalmayı yürüten süreci kaydeder."""
-    directory = state_dir()
+def register(pid: int, name: str = STATE_NAME) -> None:
+    """Süreci kaydeder."""
+    directory = state_dir(name)
     directory.mkdir(parents=True, exist_ok=True)
     (directory / str(pid)).write_text(str(pid), encoding="utf-8")
 
 
-def clear(pid: int) -> None:
+def clear(pid: int, name: str = STATE_NAME) -> None:
     """Bir sürecin kaydını siler; diğerlerine dokunmaz."""
-    (state_dir() / str(pid)).unlink(missing_ok=True)
+    (state_dir(name) / str(pid)).unlink(missing_ok=True)
 
 
-def running_pids() -> list[int]:
+def running_pids(name: str = STATE_NAME) -> list[int]:
     """Kayıtlı ve hâlâ yaşayan Pakize süreçleri; en yeniden eskiye.
 
     Bayat kayıtlar sessizce temizlenir.
     """
-    directory = state_dir()
+    directory = state_dir(name)
     if not directory.is_dir():
         return []
 

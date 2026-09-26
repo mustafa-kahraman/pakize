@@ -16,7 +16,7 @@ from pathlib import Path
 
 import typer
 
-from . import audio, book, notices, runtime
+from . import audio, book, dictation, notices, runtime
 from .config import (
     Config,
     config_path,
@@ -35,6 +35,7 @@ from .sources import (
     collect,
     latest_session,
     read_clipboard,
+    write_clipboard,
 )
 from . import i18n
 from .i18n import _
@@ -358,6 +359,63 @@ def transcribe(
 
     output.write_text(text + "\n", encoding="utf-8")
     typer.secho(_("Hazır: {path}").format(path=output), fg=typer.colors.GREEN)
+
+
+@app.command(
+    help=_(
+        "Konuşmayı kaydedip metne çevirir ve panoya koyar; "
+        "ikinci çağrı kaydı bitirir."
+    )
+)
+def dictate(
+    clipboard: bool = typer.Option(
+        True, "--clipboard/--no-clipboard", help=_("Metni panoya koy.")
+    ),
+    config_file: Path = typer.Option(
+        None, "--config", help=_("Kullanılacak config dosyası.")
+    ),
+) -> None:
+    """Konuşmayı kaydedip metne çevirir ve panoya koyar.
+
+    Tek komut iki işi görür: süren bir dikte yoksa yenisini başlatır, varsa
+    ona kaydı bitirmesini söyler. Kısayolda aynı tuş hem başlatır hem bitirir.
+    """
+    outcome = dictation.request_stop()
+    if outcome is dictation.StopRequest.REQUESTED:
+        typer.echo(_("Kayıt bitiriliyor."))
+        return
+    if outcome is dictation.StopRequest.ALREADY:
+        typer.echo(_("Kayıt zaten bitti; deşifre sürüyor."))
+        return
+
+    config = load_config(config_file)
+
+    def deliver(text: str) -> None:
+        # Önce ekran, sonra pano: pano yazılamazsa metin yine de kaybolmaz.
+        typer.echo(text)
+        if clipboard:
+            write_clipboard(text)
+
+    try:
+        dictation.dictate(
+            config,
+            deliver=deliver,
+            status=lambda message: typer.secho(message, fg=typer.colors.CYAN, err=True),
+        )
+    except KeyboardInterrupt:
+        typer.secho("\n" + _("Durduruldu."), fg=typer.colors.YELLOW)
+        raise typer.Exit(code=130) from None
+    except (
+        dictation.DictationError,
+        AsrError,
+        audio.AudioError,
+        ClipboardError,
+    ) as exc:
+        typer.secho(
+            _("Hata: {error}").format(error=exc), fg=typer.colors.RED, err=True
+        )
+        dictation.announce_error(config, str(exc))
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(

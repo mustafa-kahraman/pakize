@@ -10,7 +10,7 @@ from ..config import Config
 from ..i18n import _
 from .base import AsrEngine, AsrError, AsrUnavailable
 from .qwen import QwenEngine
-from .server import asr_server
+from .server import asr_server, check_asr_setup
 
 _REGISTRY: dict[str, type[AsrEngine]] = {
     QwenEngine.name: QwenEngine,
@@ -40,6 +40,7 @@ __all__ = [
     "AsrUnavailable",
     "QwenEngine",
     "asr_server",
+    "check_asr_setup",
     "create_asr_engine",
     "available_asr_engines",
 ]
