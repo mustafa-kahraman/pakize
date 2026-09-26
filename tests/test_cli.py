@@ -7,6 +7,7 @@ klasöre yönlendirilir.
 import os
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
@@ -794,3 +795,70 @@ def test_fix_eksik_argumanla_kullanim_gosterir(duzeltme_dosyasi):
 
     assert sonuc.exit_code == 1
     assert "Kullanım: pakize fix" in sonuc.output
+
+
+# --- bildirim yedeği ---------------------------------------------------------
+
+
+@pytest.fixture
+def bildirimler(monkeypatch) -> list[str]:
+    kayit: list[str] = []
+    monkeypatch.setattr(cli.desktop, "notify", kayit.append)
+    return kayit
+
+
+def test_ses_calinamazsa_bildirim_gosterilir(cikti_dizini, bildirimler, monkeypatch):
+    def fake_synthesize(text, destination, config, progress=None, on_part_ready=None):
+        raise cli.audio.AudioError("ffmpeg bulunamadı")
+
+    monkeypatch.setattr(cli, "synthesize", fake_synthesize)
+
+    sonuc = runner.invoke(cli.app, ["speak"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 1
+    assert bildirimler == ["Ses hatası: ffmpeg bulunamadı"]
+
+
+def test_calma_kapaliyken_ses_hatasi_bildirilmez(cikti_dizini, bildirimler, monkeypatch):
+    def fake_synthesize(text, destination, config, progress=None, on_part_ready=None):
+        raise cli.audio.AudioError("ffmpeg bulunamadı")
+
+    monkeypatch.setattr(cli, "synthesize", fake_synthesize)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-play"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 1
+    assert bildirimler == []
+
+
+def test_sonda_calma_basarisizsa_bildirim_gosterilir(cikti_dizini, bildirimler, monkeypatch):
+    def fake_synthesize(text, destination, config, progress=None, on_part_ready=None):
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"mp3")
+        return SimpleNamespace(output=destination, plan=SimpleNamespace(skipped={}), engine=config.engine)
+
+    def no_player(path):
+        raise cli.audio.AudioError("ffplay bulunamadı")
+
+    monkeypatch.setattr(cli, "synthesize", fake_synthesize)
+    monkeypatch.setattr(cli.audio, "play", no_player)
+    monkeypatch.setattr(cli.runtime, "register", lambda pid: None)
+    monkeypatch.setattr(cli.runtime, "clear", lambda pid: None)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 1
+    assert bildirimler == ["Ses hatası: ffplay bulunamadı"]
+
+
+def test_uyari_sesi_calinamazsa_kisitlama_bildirilir(rate_limited, bildirimler, monkeypatch):
+    def no_player(path):
+        raise cli.audio.AudioError("ffplay bulunamadı")
+
+    monkeypatch.setattr(cli.audio, "play", no_player)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--translate", "tr"], input="Hello.\n")
+
+    assert sonuc.exit_code == 1
+    assert len(bildirimler) == 1
+    assert bildirimler[0].startswith("Çeviri şu an kullanılamıyor")

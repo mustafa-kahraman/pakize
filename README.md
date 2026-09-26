@@ -699,6 +699,11 @@ Kısayoldan tetiklediğinde ortada terminal olmaz; **hata mesajını göremezsin
 Pano boşsa ya da ağ yoksa sessizce hiçbir şey olmaz. Ses gelmezse terminalde
 `pakize speak -c` yazıp sebebi gör.
 
+Ses hiç çalınamıyorsa (ffmpeg kurulu değil, ses aygıtı yok) hata masaüstü
+bildirimiyle gelir: Linux'ta `notify-send` (Ubuntu'da hazır; yoksa
+`sudo apt install libnotify-bin`), macOS'ta sistemin kendi bildirimi.
+Windows'ta sistemle gelen bir bildirim aracı olmadığı için bu yedek yok.
+
 `pause` ve `stop` yalnızca Pakize'nin başlattığı çalmayı yönetir; sistemdeki
 başka `ffplay` süreçlerine dokunmaz. Duraklatılmışken `stop` çalışır. Terminalden
 çalıştırdığında Ctrl+C de durdurur.

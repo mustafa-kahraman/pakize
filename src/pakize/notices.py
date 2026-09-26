@@ -26,13 +26,18 @@ def notices_dir() -> Path:
     return cache_home() / "pakize" / "notices"
 
 
-def rate_limit_notice(config: Config) -> Path:
-    """Çeviri kısıtlaması uyarısının ses dosyasını döner; yoksa üretir."""
-    text = in_language(
+def rate_limit_text(language: str) -> str:
+    """Çeviri kısıtlaması uyarısının metni; sesli uyarı da bildirim de bunu söyler."""
+    return in_language(
         "Çeviri şu an kullanılamıyor. Google kısa bir süreliğine sınır koydu. "
         "Birkaç dakika bekleyip tekrar dene; hemen denersen bekleme uzar.",
-        voice_language(config.voice),
+        language,
     )
+
+
+def rate_limit_notice(config: Config) -> Path:
+    """Çeviri kısıtlaması uyarısının ses dosyasını döner; yoksa üretir."""
+    text = rate_limit_text(voice_language(config.voice))
     return _cached_notice("rate-limit", text, config)
 
 

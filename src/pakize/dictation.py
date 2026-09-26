@@ -34,7 +34,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import IO, Callable, Iterator
 
-from . import audio, notices, runtime
+from . import audio, desktop, notices, runtime
 from .asr import check_asr_setup, create_asr_engine, launch_asr_server
 from .config import Config
 from .engines import EngineError
@@ -487,8 +487,8 @@ def announce_error(config: Config, message: str) -> None:
     """Hata tonunu çalar, ardından hatanın ilk satırını Pakize'nin sesiyle okur.
 
     Kısayoldan çalışırken ekran yoktur; kullanıcı neyin ters gittiğini ancak
-    duyar. Uyarının kendisi çalınamazsa asıl hatanın önüne geçmez: sessizce
-    vazgeçilir, hata zaten ekrana yazılmıştır.
+    duyar. Sesli uyarı çalınamazsa (ffplay yok, ses servisi yok) hata masaüstü
+    bildirimiyle gösterilir. Hiçbiri asıl hatanın önüne geçmez.
     """
     try:
         audio.play(tone("error", config))
@@ -502,4 +502,4 @@ def announce_error(config: Config, message: str) -> None:
     try:
         audio.play(notices.dictation_notice(spoken, config))
     except (EngineError, audio.AudioError, OSError):
-        pass
+        desktop.notify(message)

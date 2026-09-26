@@ -719,6 +719,12 @@ the error message**. If the clipboard is empty or there is no network, nothing
 happens silently. If you hear no sound, run `pakize speak -c` in a terminal to
 see why.
 
+If no sound can be played at all (ffmpeg missing, no audio device), the error
+arrives as a desktop notification: `notify-send` on Linux (preinstalled on
+Ubuntu; otherwise `sudo apt install libnotify-bin`), the system's own
+notification on macOS. Windows ships no command-line notification tool, so
+this fallback is not available there.
+
 `pause` and `stop` only manage playback that Pakize started; they never touch
 other `ffplay` processes on the system. `stop` works while paused. When you run
 it from a terminal, Ctrl+C stops it too.

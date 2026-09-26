@@ -16,7 +16,7 @@ from pathlib import Path
 
 import typer
 
-from . import audio, book, dictation, notices, runtime
+from . import audio, book, desktop, dictation, notices, runtime
 from .config import (
     Config,
     config_path,
@@ -181,11 +181,11 @@ def speak(
             _announce_rate_limit(config)
         raise typer.Exit(code=1) from exc
     except audio.AudioError as exc:
-        typer.secho(
-            "\n" + _("Ses hatası: {error}").format(error=exc),
-            fg=typer.colors.RED,
-            err=True,
-        )
+        message = _("Ses hatası: {error}").format(error=exc)
+        typer.secho("\n" + message, fg=typer.colors.RED, err=True)
+        # Ses çalınamıyor; kısayoldan çalışan kullanıcı hiçbir şey duymaz.
+        if play:
+            desktop.notify(message)
         raise typer.Exit(code=1) from exc
 
     typer.echo()
@@ -206,6 +206,11 @@ def speak(
         except KeyboardInterrupt:
             typer.secho("\n" + _("Durduruldu."), fg=typer.colors.YELLOW)
             raise typer.Exit(code=130) from None
+        except audio.AudioError as exc:
+            message = _("Ses hatası: {error}").format(error=exc)
+            typer.secho(message, fg=typer.colors.RED, err=True)
+            desktop.notify(message)
+            raise typer.Exit(code=1) from exc
 
 
 @app.command(
@@ -1114,6 +1119,8 @@ def _announce_rate_limit(config: Config) -> None:
             fg=typer.colors.YELLOW,
             err=True,
         )
+        # Ses yolu kapalı; uyarı ekranda, arayüzün dilinde gösterilir.
+        desktop.notify(notices.rate_limit_text(i18n.language()))
 
 
 @contextlib.contextmanager

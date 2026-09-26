@@ -635,3 +635,29 @@ def test_hata_anonsu_sesin_dilinde_okunur(calinanlar, uretilen_tonlar, monkeypat
     )
 
     assert spoken == ["Kayıtta konuşma bulunamadı.", "No speech found in the recording."]
+
+
+def test_sesli_uyari_calinamazsa_bildirim_gosterilir(uretilen_tonlar, monkeypatch):
+    """ffplay yoksa ne ton ne okuma duyulur; hata ekrana bildirim olarak gelir."""
+
+    def no_player(path):
+        raise dictation.audio.AudioError("ffplay bulunamadı")
+
+    notified: list[str] = []
+    monkeypatch.setattr(dictation.audio, "play", no_player)
+    monkeypatch.setattr(dictation.notices, "dictation_notice", lambda m, c: Path("n.mp3"))
+    monkeypatch.setattr(dictation.desktop, "notify", notified.append)
+
+    dictation.announce_error(Config(), "ffmpeg bulunamadı. Kurmak için: sudo apt install ffmpeg")
+
+    assert notified == ["ffmpeg bulunamadı. Kurmak için: sudo apt install ffmpeg"]
+
+
+def test_sesli_uyari_calinca_bildirim_gosterilmez(calinanlar, uretilen_tonlar, monkeypatch):
+    notified: list[str] = []
+    monkeypatch.setattr(dictation.notices, "dictation_notice", lambda m, c: Path("n.mp3"))
+    monkeypatch.setattr(dictation.desktop, "notify", notified.append)
+
+    dictation.announce_error(Config(), "bir şey oldu")
+
+    assert notified == []
