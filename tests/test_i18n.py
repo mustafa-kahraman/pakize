@@ -186,3 +186,13 @@ def test_ingilizce_arayuzde_komut_ciktisi_ingilizce(monkeypatch):
 
     assert sonuc.exit_code == 1
     assert "No speech is playing." in sonuc.stdout
+
+
+def test_ingilizce_metin_turkceye_geri_cevrilir():
+    """Hata mesajı arayüz dilinde üretilir; sesli uyarı sesin dilini ister."""
+    i18n.set_language("en")
+    english = i18n._("Kayıtta konuşma bulunamadı.")
+
+    assert english == "No speech found in the recording."
+    assert i18n.in_language(english, "tr") == "Kayıtta konuşma bulunamadı."
+    assert i18n.in_language("katalogda olmayan", "tr") == "katalogda olmayan"

@@ -38,7 +38,7 @@ from . import audio, notices, runtime
 from .asr import check_asr_setup, create_asr_engine, launch_asr_server
 from .config import Config
 from .engines import EngineError
-from .i18n import _
+from .i18n import _, in_language, voice_language
 from .platforms import IS_MACOS, IS_WINDOWS, cache_home, die_with_parent
 
 SAMPLE_RATE = 16000
@@ -496,7 +496,9 @@ def announce_error(config: Config, message: str) -> None:
         pass
 
     first_line = next((line for line in message.splitlines() if line.strip()), "")
-    spoken = first_line.strip() or _("Dikte başarısız oldu.")
+    # Okunan cümle sesin diline uyar, arayüzün diline değil: İngilizce
+    # ortamda Türkçe sesin İngilizce hata okuması anlaşılmıyor.
+    spoken = in_language(first_line.strip() or "Dikte başarısız oldu.", voice_language(config.voice))
     try:
         audio.play(notices.dictation_notice(spoken, config))
     except (EngineError, audio.AudioError, OSError):

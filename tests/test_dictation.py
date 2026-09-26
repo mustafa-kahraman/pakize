@@ -614,3 +614,24 @@ def test_hata_anonsu_uretilemezse_sessiz_kalir(calinanlar, uretilen_tonlar, monk
     dictation.announce_error(Config(), "bir şey oldu")
 
     assert len(calinanlar) == 1
+
+
+def test_hata_anonsu_sesin_dilinde_okunur(calinanlar, uretilen_tonlar, monkeypatch):
+    from pakize import i18n
+
+    spoken: list[str] = []
+    monkeypatch.setattr(
+        dictation.notices,
+        "dictation_notice",
+        lambda message, config: (spoken.append(message), Path("n.mp3"))[1],
+    )
+    i18n.set_language("en")
+
+    dictation.announce_error(
+        replace(Config(), voice="tr-TR-EmelNeural"), "No speech found in the recording."
+    )
+    dictation.announce_error(
+        replace(Config(), voice="en-US-JennyNeural"), "No speech found in the recording."
+    )
+
+    assert spoken == ["Kayıtta konuşma bulunamadı.", "No speech found in the recording."]

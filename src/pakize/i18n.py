@@ -91,9 +91,13 @@ def in_language(text: str, lang: str) -> str:
     Arayüz dilinden bağımsızdır: seslendirilen anonslar, CLI'ın diline değil
     okunan sesin diline uyar. Katalogda karşılığı olmayan diller İngilizceye
     düşer — Türkçe bir cümlenin Almanca sesle okunması, İngilizcesinden kötüdür.
+
+    Metin zaten İngilizceye çevrilmiş olabilir (bir hata mesajı gibi); Türkçe
+    istendiğinde katalog tersten okunur. Tersi bulunmayan metin olduğu gibi
+    kalır.
     """
     if lang == "tr":
-        return text
+        return _TR.get(text, text)
     return _EN.get(text, text)
 
 
@@ -553,6 +557,26 @@ _EN: dict[str, str] = {
     "Kayıt boş: mikrofondan ses gelmedi.":
         "The recording is empty: no audio came from the microphone.",
     "Panoya yazılamadı — {errors}": "Could not write to the clipboard — {errors}",
+    # --- fix ---
+    "Deşifre düzeltme tablosuna bir satır yazar: yanlış yazım → doğrusu. "
+    "Dikte bir kelimeyi hep yanlış yazıyorsa buraya.":
+        "Writes one line to the transcription correction table: wrong spelling → right one. "
+        "For words dictation keeps getting wrong.",
+    "YANLIŞ": "WRONG",
+    "DOĞRU": "RIGHT",
+    "Deşifrenin yazdığı biçim.": "The form the transcription produces.",
+    "Yerine yazılacak biçim.": "The form to write instead.",
+    "Tabloyu göster.": "Show the table.",
+    "YANLIŞ için satırı sil.": "Remove the line for WRONG.",
+    "Düzeltme tablosu boş.": "The correction table is empty.",
+    "Kullanım: pakize fix YANLIŞ DOĞRU  (örn. pakize fix rümut remote)":
+        "Usage: pakize fix WRONG RIGHT  (e.g. pakize fix rümut remote)",
+    "Silindi: {key}": "Removed: {key}",
+    "Tabloda yok: {key}": "Not in the table: {key}",
+    "Yazıldı: {wrong} → {right}": "Written: {wrong} → {right}",
+    "Değişti: {wrong} → {right} (önce: {previous})":
+        "Changed: {wrong} → {right} (was: {previous})",
+    "Yanlış ve doğru yazım boş olamaz.": "Neither the wrong nor the right spelling can be empty.",
     # --- dikte config açıklamaları ---
     "dikte mikrofonu, ffmpeg biçim:aygıt yazımıyla; boşsa sistem varsayılanı":
         "dictation microphone in ffmpeg's format:device form; system default if empty",
@@ -572,3 +596,6 @@ _EN: dict[str, str] = {
 Eksik girdi Türkçeye düşer; `tests/test_i18n.py` kaynaktaki her `_()`
 çağrısının burada karşılığı olduğunu doğrular.
 """
+
+_TR: dict[str, str] = {english: turkish for turkish, english in _EN.items()}
+"""İngilizce → Türkçe; `in_language` zaten çevrilmiş bir metni geri almak için."""
