@@ -253,3 +253,80 @@ def test_ozel_karakterli_anahtar_duz_metin_sayilir():
 
 def test_bos_tablo_metne_dokunmaz():
     assert apply_replacements("Merhaba.", {}) == "Merhaba."
+
+
+# --- bağlam kopyalaması ------------------------------------------------------
+
+_CONTEXT = "Pakize, benim yazdığım programın adı. Seslendirmede edge-tts var."
+
+
+@pytest.fixture
+def echoing_server(monkeypatch):
+    """İlk istekte bağlamı kopyalayan, ikincisinde sesi yazan sahte sunucu."""
+    payloads: list[dict] = []
+
+    def fake_post(url, payload, timeout):
+        payloads.append(payload)
+        has_context = payload["messages"][0]["role"] == "system"
+        content = _CONTEXT if has_context else "Merhaba Pakize."
+        return {"choices": [{"message": {"content": f"<asr_text>{content}"}}]}
+
+    monkeypatch.setattr(qwen_module, "post_json", fake_post)
+    return payloads
+
+
+def test_baglam_kopyalanirsa_baglamsiz_yeniden_sorulur(echoing_server, audio_file):
+    config = replace(
+        Config(), asr_server_url="http://127.0.0.1:8099", asr_context=_CONTEXT
+    )
+
+    text = QwenEngine(config).transcribe(audio_file)
+
+    assert text == "Merhaba Pakize."
+    assert len(echoing_server) == 2
+    assert echoing_server[1]["messages"][0]["role"] == "user"
+
+
+def test_baglamin_bir_cumlesi_kopyalansa_da_yakalanir(server, audio_file):
+    config = replace(
+        Config(), asr_server_url="http://127.0.0.1:8099", asr_context=_CONTEXT
+    )
+    server.settings["text"] = "<asr_text>Seslendirmede edge-tts var."
+    calls = {"count": 0}
+    original = qwen_module.post_json
+
+    def counting(url, payload, timeout):
+        calls["count"] += 1
+        return original(url, payload, timeout)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(qwen_module, "post_json", counting)
+        QwenEngine(config).transcribe(audio_file)
+
+    assert calls["count"] == 2
+
+
+def test_baglamdaki_terim_ciktida_gecince_kopyalama_sayilmaz(server, audio_file):
+    """Terimin kendisi ("Pakize") tam da bağlamın işi; ikinci istek atılmaz."""
+    config = replace(
+        Config(), asr_server_url="http://127.0.0.1:8099", asr_context=_CONTEXT
+    )
+    server.settings["text"] = "<asr_text>Merhaba Pakize, nasılsın?"
+
+    text = QwenEngine(config).transcribe(audio_file)
+
+    assert text == "Merhaba Pakize, nasılsın?"
+    assert server.sent["payload"]["messages"][0]["role"] == "system"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (_CONTEXT, True),
+        ("Pakize, benim yazdığım programın adı", True),
+        ("Merhaba Pakize.", False),
+        ("", False),
+    ],
+)
+def test_kopyalama_tespiti(text, expected):
+    assert qwen_module._echoes_context(text, _CONTEXT) is expected

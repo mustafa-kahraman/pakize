@@ -519,6 +519,15 @@ bölüm bölüm dikte et.
 Kısa bir cümle söyleyip hemen bitirdiysen sunucu hâlâ yükleniyor olabilir:
 kayıt yine anında kapanır, "hazır" tonu yükleme bittikten sonra gelir.
 
+Son diktenin kaydı `~/.cache/pakize/last-dictation.wav` olarak saklanır
+(her dikte öncekinin üzerine yazar). Deşifre yanlış çıktıysa kaydı dinle ve
+`pakize transcribe` ile yeniden dene: suçlu mikrofon mu model mi, oradan
+anlaşılır.
+
+Model kısa ya da belirsiz bir seste bazen sesi yazacağına `asr_context`
+paragrafını olduğu gibi kopyalar. Pakize bunu yakalar ve aynı sesi bağlamsız
+yeniden sorar; o seferlik terim yanlılığı olmaz, konuşma kaybolmaz.
+
 Kendi sunucunu ayakta tutmak istersen `asr_server_url = "http://127.0.0.1:8099"`
 yaz; Pakize o zaman sunucu açıp kapatmaz, olana bağlanır.
 

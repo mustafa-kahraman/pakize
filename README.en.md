@@ -535,6 +535,16 @@ If you said one short sentence and finished right away, the server may still
 be loading: the recording still stops at once, the "done" tone follows once
 loading completes.
 
+The last dictation's audio is kept as `~/.cache/pakize/last-dictation.wav`
+(each dictation overwrites the previous one). If the transcript came out
+wrong, listen to it and retry with `pakize transcribe`: that tells you whether
+the microphone or the model is to blame.
+
+On short or unclear audio the model sometimes copies the `asr_context`
+paragraph instead of writing what was said. Pakize catches this and asks again
+without the context; that one time there is no term biasing, nothing said is
+lost.
+
 To keep your own server running, set `asr_server_url = "http://127.0.0.1:8099"`;
 Pakize then neither starts nor stops a server, it connects to yours.
 

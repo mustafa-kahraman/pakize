@@ -431,6 +431,27 @@ def test_bitir_istegi_sunucunun_hazir_olmasini_beklemez(
     ]
 
 
+def test_son_kayit_onbellekte_saklanir(
+    linux, ffmpeg, desifre, calinanlar, uretilen_tonlar, ikinci_basis
+):
+    dictation.dictate(Config(), deliver=lambda text: None)
+
+    kept = dictation.last_recording_path()
+    assert kept.parent == dictation.tones_dir().parent
+    assert kept.read_bytes() == ffmpeg["bytes"]
+
+
+def test_son_kayit_saklanamazsa_dikte_surer(
+    linux, ffmpeg, desifre, calinanlar, uretilen_tonlar, ikinci_basis, monkeypatch
+):
+    def broken(source, target):
+        raise OSError("disk dolu")
+
+    monkeypatch.setattr(dictation.shutil, "copyfile", broken)
+
+    assert dictation.dictate(Config(), deliver=lambda text: None) == "merhaba dünya"
+
+
 def test_baslangic_tonu_kayittan_once_calinir(
     linux, ffmpeg, desifre, calinanlar, uretilen_tonlar, ikinci_basis, monkeypatch
 ):

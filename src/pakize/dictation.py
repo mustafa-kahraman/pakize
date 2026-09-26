@@ -26,6 +26,7 @@ import contextlib
 import enum
 import hashlib
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -92,6 +93,26 @@ TONES: dict[str, Tone] = {
 
 def tones_dir() -> Path:
     return cache_home() / "pakize" / "tones"
+
+
+def last_recording_path() -> Path:
+    """Son diktenin ses kaydı; her dikte bir öncekinin üzerine yazar.
+
+    Deşifre yanlış çıktığında suçlu mikrofon mu model mi, ancak kayıt
+    dinlenerek anlaşılır. Geçici dizin silindiği için bir kopya burada kalır;
+    `pakize transcribe` ile yeniden denenebilir.
+    """
+    return cache_home() / "pakize" / "last-dictation.wav"
+
+
+def _keep_last_recording(recording: Path) -> None:
+    """Kaydın kopyasını önbelleğe alır; başaramazsa dikteyi engellemez."""
+    target = last_recording_path()
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(recording, target)
+    except OSError:
+        return
 
 
 def tone(name: str, config: Config) -> Path:
@@ -431,6 +452,7 @@ def dictate(
                 _wait_until_finished(recorder, stop_requested)
                 recording = recorder.stop()
                 audio.play(stop_tone)
+                _keep_last_recording(recording)
                 say(_("Deşifre ediliyor..."))
                 server.wait_ready()
                 engine = create_asr_engine(

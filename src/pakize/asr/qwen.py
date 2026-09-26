@@ -9,11 +9,16 @@ tanımayı oraya yaslar: paragrafta "seslendirmede edge-tts var" yazıyorsa,
 konuşmacı "ecdi tiitiies" dediğinde "edge-tts" yazar. Sunucunun deşifre ucuna
 (`/v1/audio/transcriptions`) verilen istem ise metni çıktının başına kopyalar;
 o yüzden sohbet ucu kullanılır.
+
+Sohbet ucu da bağışık değil: kısa ya da belirsiz bir seste model bazen sesi
+yazacağına bağlamı olduğu gibi kopyalıyor (yaşandı: "merhaba Pakize" dendi,
+paragrafın tamamı döndü). Bu yakalanır ve aynı ses bağlamsız yeniden sorulur.
 """
 
 from __future__ import annotations
 
 import base64
+import re
 from pathlib import Path
 from typing import ClassVar
 
@@ -28,6 +33,13 @@ TEXT_MARKER = "<asr_text>"
 
 _FORMATS = {".wav": "wav", ".mp3": "mp3"}
 """Tanınan ses uzantıları ve sunucuya bildirilen biçim adları."""
+
+ECHO_MIN_CHARS = 20
+"""Bağlamın bu uzunlukta bir cümlesi çıktıda aynen geçiyorsa kopyalama sayılır.
+
+Konuşmacının bağlamdaki bir cümleyi kelimesi kelimesine söylemesi olası değil;
+kısa parçalar ("Pakize" gibi terimler) ise tam da bağlamın işi, sayılmaz.
+"""
 
 
 class QwenEngine(AsrEngine):
@@ -44,17 +56,25 @@ class QwenEngine(AsrEngine):
 
     def _recognize(self, audio: Path) -> str:
         self.ensure_available()
-        payload = self._payload(audio)
+        context = (self.config.asr_context or "").strip()
+        text = self._ask(audio, context)
+        if context and _echoes_context(text, context):
+            # Model sesi yazacağına bağlamı kopyaladı; bağlamsız sorulur.
+            # Terim yanlılığı bu seferlik kaybolur, konuşma kaybolmaz.
+            text = self._ask(audio, "")
+        return text
+
+    def _ask(self, audio: Path, context: str) -> str:
+        payload = self._payload(audio, context)
         response = post_json(self._url(), payload, self.config.asr_timeout)
         return _extract_text(response)
 
     def _url(self) -> str:
         return self.config.asr_server_url.rstrip("/") + ENDPOINT
 
-    def _payload(self, audio: Path) -> dict:
+    def _payload(self, audio: Path, context: str) -> dict:
         """Sunucuya gidecek istek gövdesini kurar."""
         messages: list[dict] = []
-        context = (self.config.asr_context or "").strip()
         if context:
             messages.append({"role": "system", "content": context})
 
@@ -74,6 +94,15 @@ class QwenEngine(AsrEngine):
         )
         # Deşifre yaratıcılık değil: aynı ses her seferinde aynı metni vermeli.
         return {"messages": messages, "temperature": 0}
+
+
+def _echoes_context(text: str, context: str) -> bool:
+    """Çıktı, sesin yazısı değil de bağlamın kopyası mı?"""
+    for sentence in re.split(r"[.!?;\n]+", context):
+        sentence = sentence.strip()
+        if len(sentence) >= ECHO_MIN_CHARS and sentence in text:
+            return True
+    return False
 
 
 def _format(audio: Path) -> str:
