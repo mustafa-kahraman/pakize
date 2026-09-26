@@ -20,6 +20,7 @@ işaretlerini de politikaya göre eler.
 - **Çeviri** — seslendirmeden önce hedef dile çevirir
 - **Motorlar** — edge-tts (çevrimiçi, kaliteli), ağ yoksa Piper'a düşer
 - **Denetim** — klavye kısayoluyla oku, duraklat, durdur
+- **Dikte** — konuş, tuşa bas, metin panoda; tanıma yerel modelle, ağ gerekmez
 - **Platformlar** — Linux, macOS ve Windows
 
 > **Resmî olmayan servisler.** Pakize sesi `edge-tts` üzerinden Microsoft'un
@@ -240,6 +241,8 @@ ayarını değiştir.
 
 ```bash
 pakize book kitap.epub        # bir kitabı bölüm bölüm seslendir
+pakize dictate                # dikte: kaydet, metne çevir, panoya koy (ikinci çağrı bitirir)
+pakize transcribe kayit.wav   # bir ses dosyasındaki konuşmayı metne çevir
 pakize pause                  # çalmayı duraklat; duraklatılmışsa sürdür (aynı komut)
 pakize stop                   # çalmakta olan seslendirmeyi durdur
 pakize replay                 # en son üretilen sesi yeniden çal
@@ -403,6 +406,122 @@ son cümlesini değil.
 `--roles all` seçildiğinde araya kimin konuştuğunu belirten kısa bir ayraç
 konur ("Kullanıcı:", "Asistan:"); tek rol okunurken ayraç konmaz.
 
+## Dikte
+
+Pakize ters yönde de çalışır: konuş, tuşa bas, metin panoda. Tanıma yerel bir
+modelle yapılır; ses makineden çıkmaz, ağ gerekmez.
+
+### Kurulum
+
+İki parça gerekir: llama.cpp'nin sunucusu ve Qwen3-ASR modeli. İkisi de tek
+seferlik indirmedir.
+
+1. [llama.cpp sürümlerinden](https://github.com/ggml-org/llama.cpp/releases)
+   platformuna uyan arşivi indir; içinden `llama-server` yeter.
+2. [Qwen3-ASR-1.7B-GGUF](https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF)
+   sayfasından model dosyasını (`Qwen3-ASR-1.7B-Q8_0.gguf`) ve ses kodlayıcısını
+   (`mmproj-Qwen3-ASR-1.7B-Q8_0.gguf`) indir.
+3. Yollarını config'e yaz:
+
+```bash
+pakize config set asr_model ~/.local/share/pakize/asr/Qwen3-ASR-1.7B-Q8_0.gguf
+pakize config set asr_mmproj ~/.local/share/pakize/asr/mmproj-Qwen3-ASR-1.7B-Q8_0.gguf
+pakize config set asr_server_binary ~/.local/share/pakize/asr/llama-server
+```
+
+`llama-server` `PATH` üzerindeyse son satır gerekmez. Mikrofon kaydını zaten
+kurulu olan `ffmpeg` yapar.
+
+Kurulumu bir ses dosyasıyla dene:
+
+```bash
+pakize transcribe kayit.wav
+```
+
+### Nasıl çalışır
+
+Tek komut, iki basış:
+
+1. `pakize dictate` — yükselen bir ton çalar, kayıt başlar. Deşifre sunucusu
+   bu sırada arka planda açılır; modelin yüklenmesi sen konuşurken geçer.
+2. `pakize dictate` (tekrar) — kayıt biter, alçalan bir ton çalar, konuşma
+   metne çevrilir ve panoya konur; "hazır" tonu metnin panoda olduğunu söyler.
+   Sunucu kapanır.
+
+Terminalden çalıştırıyorsan ikinci basış Ctrl+C'dir. Metin panonun yanı sıra
+ekrana da basılır; `--no-clipboard` yalnız ekrana basar.
+
+Sürekli dinleyen hiçbir şey yoktur: mikrofon ve sunucu tek bir diktenin ömrü
+kadar yaşar. İkinci basış unutulursa kayıt `dictate_max_seconds` (varsayılan
+5 dakika) dolunca kendiliğinden biter ve o ana kadarki konuşma çevrilir.
+
+Bir şey ters giderse pes bir ton çalar ve Pakize hatayı kendi sesiyle okur:
+kısayoldan çalışırken ekran yoktur, hatanın tek görünür yeri sestir.
+
+### Tonlar
+
+Varsayılan tonlar ffmpeg ile üretilir; pakette ses dosyası yoktur. Kendi
+seslerini kullanmak istersen config'te dosya göster:
+
+```toml
+dictate_start_sound = "~/Music/sounds/start.mp3"   # kayıt başlarken
+dictate_stop_sound  = "~/Music/sounds/stop.mp3"    # kayıt bitince
+dictate_done_sound  = "~/Music/sounds/done.mp3"    # metin panoya konunca
+dictate_error_sound = "~/Music/sounds/error.mp3"   # bir şey ters gidince
+```
+
+Sıra kasıtlı: başta ton kayıttan önce, sonda kayıttan sonra çalar; aksi hâlde
+mikrofon tonun kendisini kaydeder.
+
+### Mikrofon
+
+Linux'ta PulseAudio/PipeWire'ın varsayılan aygıtı, macOS'ta ilk ses aygıtı
+kullanılır. Başka bir aygıt için ayar, ffmpeg'in `biçim:aygıt` yazımıyla
+verilir:
+
+```bash
+pakize config set dictate_microphone "pulse:alsa_input.usb-Mikrofon"
+```
+
+Windows'ta varsayılan yoktur; `dshow` aygıtı adıyla ister:
+
+```powershell
+ffmpeg -list_devices true -f dshow -i dummy
+pakize config set dictate_microphone "dshow:audio=Mikrofon (Realtek Audio)"
+```
+
+### Tanımayı iyileştirmek
+
+İki ayar var, ikisi de config'te:
+
+- `asr_context` — terimleri **cümle içinde anlatan** kısa bir paragraf. Model
+  bunu arka plan bilgisi sayar: "seslendirmede edge-tts var" yazıyorsa, sen
+  "ecdi tiitiies" dediğinde `edge-tts` yazar. Çıplak kelime listesi işe
+  yaramaz.
+- `[asr_replacements]` — bağlamla bile tutmayan kelimeler için düzeltme
+  tablosu. Yalnız bütün kelime eşleşir; büyük-küçük harf ayrı sayılır, çünkü
+  Türkçede `ılık` ile `ilik` ayrı kelimelerdir.
+
+```toml
+asr_context = "Pakize'yi uv ile kuruyorum; seslendirmede edge-tts ve Piper var."
+
+[asr_replacements]
+"Yuvı" = "uv"
+"İpab" = "EPUB"
+```
+
+### Bilinmesi gerekenler
+
+Deşifre gerçek zamandan yavaştır ve uzun kayıtta süre orantıdan hızlı büyür;
+dikte kısa parçalar hâlinde (bir iki cümle) en iyi çalışır. Uzun bir metni
+bölüm bölüm dikte et.
+
+"Bitir" isteği sunucu hâlâ yüklenirken gelirse yükleme bitince işlenir; kayıt
+o kadar uzar, konuşma kaybolmaz.
+
+Kendi sunucunu ayakta tutmak istersen `asr_server_url = "http://127.0.0.1:8099"`
+yaz; Pakize o zaman sunucu açıp kapatmaz, olana bağlanır.
+
 ## Klavye kısayolu
 
 Asıl kullanım şekli bu: metni kopyala, tuşa bas, dinle.
@@ -415,14 +534,16 @@ sistemine bağlıdır ve kurmak gerekir:
 sudo apt install xclip      # X11 için (Wayland'de: wl-clipboard)
 ```
 
-Üç kısayol yeterli. `pause` tek başına hem duraklatır hem sürdürür, o
-yüzden "devam et" için ayrı bir tuşa gerek yok:
+Dört kısayol yeterli. `pause` tek başına hem duraklatır hem sürdürür, o
+yüzden "devam et" için ayrı bir tuşa gerek yok; `dictate` de aynı tuşla hem
+başlar hem biter:
 
 | Ad | Komut | Linux/Windows | macOS |
 |----|-------|---------------|-------|
 | `Pakize: panodakini oku` | `pakize speak --clipboard` | `Super+S` | `⌥⌘S` |
 | `Pakize: duraklat` | `pakize pause` | `Super+Space` | `⌥⌘Space` |
 | `Pakize: durdur` | `pakize stop` | `Shift+Super+D` | `⇧⌥⌘D` |
+| `Pakize: dikte` | `pakize dictate` | `Super+W` | `⌥⌘W` |
 
 ### Linux (GNOME)
 
@@ -451,6 +572,7 @@ YOLLAR=$(
   kur pakize-oku   "pakize speak --clipboard" '<Super>s'        'Pakize: panodakini oku'
   kur pakize-pause "pakize pause"             '<Super>space'    'Pakize: duraklat'
   kur pakize-stop  "pakize stop"              '<Shift><Super>d' 'Pakize: durdur'
+  kur pakize-dikte "pakize dictate"           '<Super>w'        'Pakize: dikte'
 )
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
   "[$(echo $YOLLAR | tr ' ' ',')]"
@@ -488,8 +610,8 @@ gsettings get org.gnome.desktop.wm.keybindings switch-input-source
 
 ### macOS
 
-Sistemle gelen yol Automator'dır; ek yazılım gerekmez. Üç komutun her biri için
-bir Hızlı İşlem oluşturulur, sonra tuş atanır.
+Sistemle gelen yol Automator'dır; ek yazılım gerekmez. Her komut için bir
+Hızlı İşlem oluşturulur, sonra tuş atanır.
 
 1. **Automator → Yeni Belge → Hızlı İşlem (Quick Action)**
 2. Üstte: *İş akışı şunu alır:* **girdi yok**, *şurada:* **herhangi bir uygulama**
@@ -499,22 +621,23 @@ bir Hızlı İşlem oluşturulur, sonra tuş atanır.
 $HOME/.local/bin/pakize speak --clipboard
 ```
 
-4. `Pakize: panodakini oku` adıyla kaydet; aynısını `pakize pause` ve
-   `pakize stop` için tekrarla.
+4. `Pakize: panodakini oku` adıyla kaydet; aynısını `pakize pause`,
+   `pakize stop` ve `pakize dictate` için tekrarla.
 5. **Sistem Ayarları → Klavye → Klavye Kısayolları → Hizmetler → Genel** —
-   üç Hızlı İşlemin yanına tuşları yaz.
+   Hızlı İşlemlerin yanına tuşları yaz.
 
 > **Tam yol şart.** Automator, giriş kabuğunun `PATH`'ini miras almaz; sadece
 > `pakize` yazarsan "command not found" alırsın ve kısayol sessizce hiçbir şey
 > yapmaz. Doğru yolu `which pakize` ile öğren.
 
 Daha hafif bir yol istersen [`skhd`](https://github.com/koekeishiya/skhd) ile
-tek dosyada üç satır yeter:
+tek dosyada birkaç satır yeter:
 
 ```
 alt + cmd - s : $HOME/.local/bin/pakize speak --clipboard
 alt + cmd - space : $HOME/.local/bin/pakize pause
 shift + alt + cmd - d : $HOME/.local/bin/pakize stop
+alt + cmd - w : $HOME/.local/bin/pakize dictate
 ```
 
 ### Windows
@@ -531,7 +654,7 @@ Sistemle gelen yol kısayol dosyasıdır (`.lnk`); ek yazılım gerekmez.
 3. `Pakize: panodakini oku` adıyla kaydet.
 4. Kısayola **sağ tık → Özellikler → Kısayol tuşu** alanına tıkla ve tuş
    bileşimine bas (`Ctrl+Alt+S` gibi).
-5. Aynısını `pause` ve `stop` için tekrarla.
+5. Aynısını `pause`, `stop` ve `dictate` için tekrarla.
 
 > Bu yöntemde her basışta kısa bir konsol penceresi yanıp söner. Rahatsız
 > ediyorsa **Çalıştır** alanını *Simge durumunda* yap ya da
@@ -542,6 +665,7 @@ Sistemle gelen yol kısayol dosyasıdır (`.lnk`); ek yazılım gerekmez.
 #s::Run('pakize.exe speak --clipboard', , 'Hide')
 #Space::Run('pakize.exe pause', , 'Hide')
 +#d::Run('pakize.exe stop', , 'Hide')
+#w::Run('pakize.exe dictate', , 'Hide')
 ```
 
 > `Win` tuşlu bileşimlerin çoğu Windows'ta rezervedir (`Win+S` arama açar).
@@ -766,6 +890,16 @@ metin
   → chunking.py           cümle sınırında, karakter limitine göre paketleme
   → engines/              TTS adaptörü (edge; yedek motor takılabilir)
   → audio.py              ffmpeg ile birleştirme ve çalma
+```
+
+Ters yön, dikte:
+
+```
+ses
+  → dictation.py          kayıt (ffmpeg), tonlar, iki basışın eşgüdümü
+  → asr/server.py         deşifre sunucusunun ömrü: her iş için aç-kapat
+  → asr/                  tanıma adaptörü (qwen) + düzeltme tablosu
+  → sources/clipboard.py  metin panoya
 ```
 
 Tüm arayüzler (CLI, pano kısayolu, transkript okuyucu, web paneli)

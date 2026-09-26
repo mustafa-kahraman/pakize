@@ -20,6 +20,7 @@ tables, links and formatting marks according to a policy you control.
 - **Translation** — translates to a target language before speaking
 - **Engines** — edge-tts (online, high quality), falls back to Piper when offline
 - **Control** — read, pause and stop from a keyboard shortcut
+- **Dictation** — speak, press a key, the text is on your clipboard; local model, no network
 - **Platforms** — Linux, macOS and Windows
 
 > **Built for Turkish.** The default voice and the decimal-separator handling
@@ -247,6 +248,8 @@ permanent archive.
 
 ```bash
 pakize book book.epub         # narrate a book chapter by chapter
+pakize dictate                # dictate: record, transcribe, copy (a second call finishes)
+pakize transcribe rec.wav     # transcribe the speech in an audio file
 pakize pause                  # pause playback; resume if paused (same command)
 pakize stop                   # stop the playback in progress
 pakize replay                 # replay the most recently produced audio
@@ -415,6 +418,126 @@ With `--roles all`, a short spoken separator marks who is talking
 ("Kullanıcı:" = user, "Asistan:" = assistant); no separator is added when
 reading a single role.
 
+## Dictation
+
+Pakize works in the other direction too: speak, press a key, the text is on
+your clipboard. Recognition runs on a local model; audio never leaves the
+machine and no network is needed.
+
+### Setup
+
+Two pieces are needed: llama.cpp's server and the Qwen3-ASR model. Both are
+one-time downloads.
+
+1. From the [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases)
+   download the archive for your platform; `llama-server` from it is enough.
+2. From [Qwen3-ASR-1.7B-GGUF](https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF)
+   download the model (`Qwen3-ASR-1.7B-Q8_0.gguf`) and its audio encoder
+   (`mmproj-Qwen3-ASR-1.7B-Q8_0.gguf`).
+3. Write the paths to the config:
+
+```bash
+pakize config set asr_model ~/.local/share/pakize/asr/Qwen3-ASR-1.7B-Q8_0.gguf
+pakize config set asr_mmproj ~/.local/share/pakize/asr/mmproj-Qwen3-ASR-1.7B-Q8_0.gguf
+pakize config set asr_server_binary ~/.local/share/pakize/asr/llama-server
+```
+
+The last line is unnecessary if `llama-server` is on your `PATH`. The
+microphone is recorded by the `ffmpeg` you already installed.
+
+Try the setup on an audio file:
+
+```bash
+pakize transcribe recording.wav
+```
+
+### How it works
+
+One command, two presses:
+
+1. `pakize dictate` — a rising tone plays and recording starts. The
+   transcription server starts in the background meanwhile; the model loads
+   while you speak.
+2. `pakize dictate` (again) — recording stops, a falling tone plays, the speech
+   is transcribed and put on the clipboard; a "done" tone tells you the text is
+   there. The server shuts down.
+
+From a terminal, the second press is Ctrl+C. The text is printed as well as
+copied; `--no-clipboard` only prints it.
+
+Nothing keeps listening: the microphone and the server live exactly as long as
+one dictation. If you forget the second press, recording ends on its own after
+`dictate_max_seconds` (5 minutes by default) and what was said until then is
+transcribed.
+
+If something goes wrong, a low tone plays and Pakize reads the error out loud
+in its own voice: from a shortcut there is no screen, so sound is the only
+place the error can show.
+
+### Tones
+
+The default tones are generated with ffmpeg; the package ships no sound files.
+To use your own sounds, point the config at files:
+
+```toml
+dictate_start_sound = "~/Music/sounds/start.mp3"   # recording starts
+dictate_stop_sound  = "~/Music/sounds/stop.mp3"    # recording ends
+dictate_done_sound  = "~/Music/sounds/done.mp3"    # text is on the clipboard
+dictate_error_sound = "~/Music/sounds/error.mp3"   # something went wrong
+```
+
+The order is deliberate: the start tone plays before recording begins and the
+stop tone after it ends; otherwise the microphone would record the tone itself.
+
+### Microphone
+
+On Linux the PulseAudio/PipeWire default device is used, on macOS the first
+audio device. Another device is set in ffmpeg's `format:device` form:
+
+```bash
+pakize config set dictate_microphone "pulse:alsa_input.usb-Microphone"
+```
+
+Windows has no default; `dshow` wants the device by name:
+
+```powershell
+ffmpeg -list_devices true -f dshow -i dummy
+pakize config set dictate_microphone "dshow:audio=Microphone (Realtek Audio)"
+```
+
+### Improving recognition
+
+Two settings, both in the config:
+
+- `asr_context` — a short paragraph that **uses your terms in sentences**. The
+  model treats it as background knowledge: if it says "speech comes from
+  edge-tts", it writes `edge-tts` when you say it. A bare word list does not
+  help.
+- `[asr_replacements]` — a correction table for words that do not stick even
+  with context. Only whole words match, and case matters: in Turkish `ılık`
+  and `ilik` are different words.
+
+```toml
+asr_context = "I install Pakize with uv; speech comes from edge-tts and Piper."
+
+[asr_replacements]
+"Yuvı" = "uv"
+"İpab" = "EPUB"
+```
+
+### Things worth knowing
+
+Transcription is slower than real time, and on long recordings the time grows
+faster than the length; dictation works best in short pieces (a sentence or
+two). Dictate a long text section by section.
+
+If the "finish" request arrives while the server is still loading, it is
+handled once loading completes; the recording runs that much longer, nothing
+said is lost.
+
+To keep your own server running, set `asr_server_url = "http://127.0.0.1:8099"`;
+Pakize then neither starts nor stops a server, it connects to yours.
+
 ## Keyboard shortcut
 
 This is the intended way to use it: copy text, press a key, listen.
@@ -427,14 +550,16 @@ window system and has to be installed:
 sudo apt install xclip      # for X11 (on Wayland: wl-clipboard)
 ```
 
-Three shortcuts are enough. `pause` both pauses and resumes on its own, so no
-separate "resume" key is needed:
+Four shortcuts are enough. `pause` both pauses and resumes on its own, so no
+separate "resume" key is needed; `dictate` likewise starts and finishes with
+the same key:
 
 | Name | Command | Linux/Windows | macOS |
 |------|---------|---------------|-------|
 | `Pakize: read clipboard` | `pakize speak --clipboard` | `Super+S` | `⌥⌘S` |
 | `Pakize: pause` | `pakize pause` | `Super+Space` | `⌥⌘Space` |
 | `Pakize: stop` | `pakize stop` | `Shift+Super+D` | `⇧⌥⌘D` |
+| `Pakize: dictate` | `pakize dictate` | `Super+W` | `⌥⌘W` |
 
 ### Linux (GNOME)
 
@@ -463,6 +588,7 @@ PATHS=$(
   add pakize-read  "pakize speak --clipboard" '<Super>s'        'Pakize: read clipboard'
   add pakize-pause "pakize pause"             '<Super>space'    'Pakize: pause'
   add pakize-stop  "pakize stop"              '<Shift><Super>d' 'Pakize: stop'
+  add pakize-dictate "pakize dictate"         '<Super>w'        'Pakize: dictate'
 )
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
   "[$(echo $PATHS | tr ' ' ',')]"
@@ -512,22 +638,23 @@ Action per command, then assign a key.
 $HOME/.local/bin/pakize speak --clipboard
 ```
 
-4. Save it as `Pakize: read clipboard`; repeat for `pakize pause` and
-   `pakize stop`.
+4. Save it as `Pakize: read clipboard`; repeat for `pakize pause`,
+   `pakize stop` and `pakize dictate`.
 5. **System Settings → Keyboard → Keyboard Shortcuts → Services → General** —
-   assign keys next to the three Quick Actions.
+   assign keys next to the Quick Actions.
 
 > **The full path is mandatory.** Automator does not inherit your login shell's
 > `PATH`; if you write just `pakize` you get "command not found" and the shortcut
 > silently does nothing. Find the right path with `which pakize`.
 
-If you want something lighter, three lines in a single
+If you want something lighter, a few lines in a single
 [`skhd`](https://github.com/koekeishiya/skhd) file are enough:
 
 ```
 alt + cmd - s : $HOME/.local/bin/pakize speak --clipboard
 alt + cmd - space : $HOME/.local/bin/pakize pause
 shift + alt + cmd - d : $HOME/.local/bin/pakize stop
+alt + cmd - w : $HOME/.local/bin/pakize dictate
 ```
 
 ### Windows
@@ -545,7 +672,7 @@ The built-in route is a shortcut file (`.lnk`); no extra software needed.
 3. Save it as `Pakize: read clipboard`.
 4. **Right-click the shortcut → Properties → Shortcut key**, click the field and
    press the key combination (e.g. `Ctrl+Alt+S`).
-5. Repeat for `pause` and `stop`.
+5. Repeat for `pause`, `stop` and `dictate`.
 
 > With this method a console window flashes on every press. If that bothers you,
 > set **Run** to *Minimized*, or use
@@ -556,6 +683,7 @@ The built-in route is a shortcut file (`.lnk`); no extra software needed.
 #s::Run('pakize.exe speak --clipboard', , 'Hide')
 #Space::Run('pakize.exe pause', , 'Hide')
 +#d::Run('pakize.exe stop', , 'Hide')
+#w::Run('pakize.exe dictate', , 'Hide')
 ```
 
 > Most `Win` key combinations are reserved on Windows (`Win+S` opens search).
@@ -791,6 +919,16 @@ text
   → chunking.py           packing at sentence boundaries, up to a character limit
   → engines/              TTS adapter (edge; a fallback engine can be plugged in)
   → audio.py              concatenation and playback via ffmpeg
+```
+
+The other direction, dictation:
+
+```
+audio
+  → dictation.py          recording (ffmpeg), tones, coordinating the two presses
+  → asr/server.py         the transcription server's lifetime: start and stop per job
+  → asr/                  recognition adapter (qwen) + correction table
+  → sources/clipboard.py  text to the clipboard
 ```
 
 Every interface (CLI, clipboard shortcut, transcript reader, web panel) calls
