@@ -186,7 +186,7 @@ the other side would rather run `uv tool install pakize`. Whoever receives the
 file installs it by pointing at its path:
 
 ```bash
-uv tool install /path/pakize-0.4.0-py3-none-any.whl
+uv tool install /path/pakize-0.4.1-py3-none-any.whl
 ```
 
 The package carries only Python dependencies; `ffmpeg` and the optional tools
