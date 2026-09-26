@@ -435,6 +435,115 @@ def set_config_value(key: str, raw_value: str, path: Path | None = None) -> str:
     return rendered
 
 
+REPLACEMENTS_TABLE = "asr_replacements"
+
+
+def set_replacement(wrong: str, right: str, path: Path | None = None) -> str | None:
+    """Düzeltme tablosuna bir satır yazar; anahtar varsa eski değerini döner.
+
+    Dosya yoksa açıklamalı varsayılanlarla oluşturulur; tablo yoksa dosyanın
+    sonuna açılır. Diğer satırlara dokunulmaz. Anahtar her zaman tırnaklı
+    yazılır: Türkçe harfler TOML'un çıplak anahtarında geçerli değil.
+    """
+    if not wrong.strip() or not right.strip():
+        raise ValueError(_("Yanlış ve doğru yazım boş olamaz."))
+
+    target = path or config_path()
+    lines = _read_config_lines(target)
+    start, end = _table_span(lines, REPLACEMENTS_TABLE)
+    if start is None:
+        lines += ["", f"[{REPLACEMENTS_TABLE}]"]
+        start, end = len(lines), len(lines)
+
+    new_line = f"{_toml_value(wrong)} = {_toml_value(right)}"
+    for index in range(start, end):
+        entry = _table_entry(lines[index])
+        if entry is not None and entry[0] == wrong:
+            lines[index] = new_line
+            _write_config_lines(target, lines)
+            return entry[1]
+
+    # Tablonun sonuna, sondaki boş satırların üstüne eklenir.
+    insert_at = end
+    while insert_at > start and not lines[insert_at - 1].strip():
+        insert_at -= 1
+    lines.insert(insert_at, new_line)
+    _write_config_lines(target, lines)
+    return None
+
+
+def remove_replacement(wrong: str, path: Path | None = None) -> bool:
+    """Düzeltme tablosundan bir satırı siler; satır yoksa False döner."""
+    target = path or config_path()
+    if not target.is_file():
+        return False
+    lines = target.read_text(encoding="utf-8").splitlines()
+    start, end = _table_span(lines, REPLACEMENTS_TABLE)
+    if start is None:
+        return False
+    for index in range(start, end):
+        entry = _table_entry(lines[index])
+        if entry is not None and entry[0] == wrong:
+            del lines[index]
+            _write_config_lines(target, lines)
+            return True
+    return False
+
+
+def _read_config_lines(target: Path) -> list[str]:
+    if target.is_file():
+        return target.read_text(encoding="utf-8").splitlines()
+    return render_default_config().splitlines()
+
+
+def _write_config_lines(target: Path, lines: list[str]) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _table_span(lines: list[str], table: str) -> tuple[int | None, int]:
+    """Bir tablonun gövdesinin satır aralığı: (başlıktan sonraki ilk satır, bitiş).
+
+    Tablo yoksa (None, len). Gövde bir sonraki `[başlık]` satırına kadar sürer.
+    """
+    header = f"[{table}]"
+    for index, line in enumerate(lines):
+        if line.strip() == header:
+            end = next(
+                (
+                    later
+                    for later in range(index + 1, len(lines))
+                    if lines[later].lstrip().startswith("[")
+                ),
+                len(lines),
+            )
+            return index + 1, end
+    return None, len(lines)
+
+
+_TABLE_ENTRY = re.compile(r'^\s*(?:"((?:[^"\\]|\\.)*)"|([A-Za-z0-9_-]+))\s*=\s*(.*)$')
+
+
+def _table_entry(line: str) -> tuple[str, str] | None:
+    """Tablo satırını (anahtar, ham değer) olarak okur; satır ayar değilse None.
+
+    Anahtar tırnaklı ya da çıplak olabilir; yorum satırları ayar sayılmaz.
+    """
+    match = _TABLE_ENTRY.match(line)
+    if match is None:
+        return None
+    quoted, bare, raw_value = match.groups()
+    key = _unescape(quoted) if quoted is not None else bare
+    value = raw_value.split("#", 1)[0].strip() if not raw_value.startswith('"') else raw_value.strip()
+    if value.startswith('"') and value.endswith('"') and len(value) >= 2:
+        value = _unescape(value[1:-1])
+    return key, value
+
+
+def _unescape(text: str) -> str:
+    return text.replace('\\"', '"').replace("\\\\", "\\")
+
+
 def _parse_setting(key: str, raw: str) -> object:
     """CLI'dan gelen metin değeri ayarın tipine çevirir; tanımazsa hata verir."""
     if key in _PATH_FIELDS:

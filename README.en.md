@@ -250,6 +250,7 @@ permanent archive.
 pakize book book.epub         # narrate a book chapter by chapter
 pakize dictate                # dictate: record, transcribe, copy (a second call finishes)
 pakize transcribe rec.wav     # transcribe the speech in an audio file
+pakize fix rümut remote       # dictation keeps getting a word wrong: add a correction
 pakize pause                  # pause playback; resume if paused (same command)
 pakize stop                   # stop the playback in progress
 pakize replay                 # replay the most recently produced audio
@@ -524,6 +525,17 @@ asr_context = "I install Pakize with uv; speech comes from edge-tts and Piper."
 "Yuvı" = "uv"
 "İpab" = "EPUB"
 ```
+
+To add a line without opening the file:
+
+```bash
+pakize fix Yuvı uv            # writes it; overwrites an existing entry
+pakize fix --list             # show the table
+pakize fix --remove Yuvı      # delete the line
+```
+
+Suffixed forms need their own lines: the correction for `rümut` does not
+catch `rümutu`; that one needs `pakize fix rümutu remote'u`.
 
 ### Things worth knowing
 

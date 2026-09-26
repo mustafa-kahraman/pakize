@@ -21,7 +21,9 @@ from .config import (
     Config,
     config_path,
     load_config,
+    remove_replacement,
     set_config_value,
+    set_replacement,
     write_default_config,
 )
 from .asr import AsrError, asr_server, create_asr_engine
@@ -416,6 +418,89 @@ def dictate(
         )
         dictation.announce_error(config, str(exc))
         raise typer.Exit(code=1) from exc
+
+
+@app.command(
+    help=_(
+        "Deşifre düzeltme tablosuna bir satır yazar: yanlış yazım → doğrusu. "
+        "Dikte bir kelimeyi hep yanlış yazıyorsa buraya."
+    )
+)
+def fix(
+    wrong: str = typer.Argument(
+        None, metavar=_("YANLIŞ"), help=_("Deşifrenin yazdığı biçim.")
+    ),
+    right: str = typer.Argument(
+        None, metavar=_("DOĞRU"), help=_("Yerine yazılacak biçim.")
+    ),
+    list_only: bool = typer.Option(
+        False, "--list", "-l", help=_("Tabloyu göster.")
+    ),
+    remove: bool = typer.Option(
+        False, "--remove", help=_("YANLIŞ için satırı sil.")
+    ),
+) -> None:
+    """Deşifre düzeltme tablosuna bir satır yazar: yanlış yazım → doğrusu.
+
+    Tablo bütün kelimeyle ve büyük-küçük harfe duyarlı eşleşir; ekli biçimler
+    ("rümutu") ayrı satır ister. Bir sonraki dikte dosyayı yeniden okur.
+    """
+    path = config_path()
+
+    if list_only:
+        table = load_config(path).asr_replacements
+        if not table:
+            typer.secho(_("Düzeltme tablosu boş."), fg=typer.colors.YELLOW)
+            return
+        width = max(len(key) for key in table)
+        for key, value in table.items():
+            typer.echo(f"{key:<{width}}  →  {value}")
+        return
+
+    if wrong is None:
+        typer.secho(
+            _("Kullanım: pakize fix YANLIŞ DOĞRU  (örn. pakize fix rümut remote)"),
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    if remove:
+        if remove_replacement(wrong, path):
+            typer.secho(_("Silindi: {key}").format(key=wrong), fg=typer.colors.GREEN)
+            return
+        typer.secho(
+            _("Tabloda yok: {key}").format(key=wrong), fg=typer.colors.YELLOW
+        )
+        raise typer.Exit(code=1)
+
+    if right is None:
+        typer.secho(
+            _("Kullanım: pakize fix YANLIŞ DOĞRU  (örn. pakize fix rümut remote)"),
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        previous = set_replacement(wrong, right, path)
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from None
+
+    if previous is None:
+        typer.secho(
+            _("Yazıldı: {wrong} → {right}").format(wrong=wrong, right=right),
+            fg=typer.colors.GREEN,
+        )
+    else:
+        typer.secho(
+            _("Değişti: {wrong} → {right} (önce: {previous})").format(
+                wrong=wrong, right=right, previous=previous
+            ),
+            fg=typer.colors.GREEN,
+        )
+    typer.echo(_("Config dosyası: {path}").format(path=path))
 
 
 @app.command(

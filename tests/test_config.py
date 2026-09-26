@@ -249,3 +249,122 @@ def test_dikte_varsayilanlari_ton_uretir_ve_bes_dakikada_keser():
     assert config.dictate_microphone is None
     assert config.dictate_max_seconds == 300.0
     assert config.dictate_done_sound is None
+
+
+# --- düzeltme tablosu: fix ---------------------------------------------------
+
+
+def test_fix_dosya_yoksa_olusturur_ve_tabloya_yazar(tmp_path):
+    from pakize.config import set_replacement
+
+    path = tmp_path / "config.toml"
+
+    assert set_replacement("rümut", "remote", path) is None
+    assert load_config(path).asr_replacements == {"rümut": "remote"}
+    assert load_config(path).voice == Config().voice
+
+
+def test_fix_var_olan_tabloya_ekler_diger_satirlara_dokunmaz(tmp_path):
+    from pakize.config import set_replacement
+
+    path = tmp_path / "config.toml"
+    original = (
+        'voice = "tr-TR-AhmetNeural"\n\n[policy]\nurl = "skip"\n\n'
+        '[asr_replacements]\n# yorum\n"Parkise" = "Pakize"\n'
+    )
+    path.write_text(original, encoding="utf-8")
+
+    set_replacement("rümut", "remote", path)
+
+    assert path.read_text(encoding="utf-8") == original + '"rümut" = "remote"\n'
+    assert load_config(path).asr_replacements == {"Parkise": "Pakize", "rümut": "remote"}
+
+
+def test_fix_tablo_yoksa_dosyanin_sonuna_acar(tmp_path):
+    from pakize.config import set_replacement
+
+    path = tmp_path / "config.toml"
+    path.write_text('voice = "tr-TR-AhmetNeural"\n', encoding="utf-8")
+
+    set_replacement("rümut", "remote", path)
+
+    assert path.read_text(encoding="utf-8") == (
+        'voice = "tr-TR-AhmetNeural"\n\n[asr_replacements]\n"rümut" = "remote"\n'
+    )
+
+
+def test_fix_ayni_anahtari_uzerine_yazar_ve_eskisini_doner(tmp_path):
+    from pakize.config import set_replacement
+
+    path = tmp_path / "config.toml"
+    path.write_text('[asr_replacements]\n"rümut" = "remot"\n', encoding="utf-8")
+
+    assert set_replacement("rümut", "remote", path) == "remot"
+    assert load_config(path).asr_replacements == {"rümut": "remote"}
+
+
+def test_fix_tablonun_ortasina_degil_sonuna_ekler(tmp_path):
+    """Tablodan sonra başka bir tablo varsa satır yanlış tabloya düşmemeli."""
+    from pakize.config import set_replacement
+
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[asr_replacements]\n"a" = "b"\n\n[policy]\nurl = "skip"\n', encoding="utf-8"
+    )
+
+    set_replacement("rümut", "remote", path)
+
+    assert path.read_text(encoding="utf-8") == (
+        '[asr_replacements]\n"a" = "b"\n"rümut" = "remote"\n\n[policy]\nurl = "skip"\n'
+    )
+
+
+def test_fix_ust_duzeydeki_ayni_adli_ayara_dokunmaz(tmp_path):
+    from pakize.config import set_replacement
+
+    path = tmp_path / "config.toml"
+    path.write_text('voice = "x"\n[asr_replacements]\n', encoding="utf-8")
+
+    set_replacement("voice", "ses", path)
+
+    config = load_config(path)
+    assert config.voice == "x"
+    assert config.asr_replacements == {"voice": "ses"}
+
+
+def test_fix_tirnak_iceren_degerleri_kacirir(tmp_path):
+    from pakize.config import set_replacement
+
+    path = tmp_path / "config.toml"
+
+    set_replacement('de"mo', "README'yi", path)
+
+    assert load_config(path).asr_replacements == {'de"mo': "README'yi"}
+
+
+def test_fix_bos_yazimi_reddeder(tmp_path):
+    from pakize.config import set_replacement
+
+    with pytest.raises(ValueError):
+        set_replacement(" ", "remote", tmp_path / "config.toml")
+    with pytest.raises(ValueError):
+        set_replacement("rümut", "", tmp_path / "config.toml")
+
+
+def test_fix_remove_satiri_siler(tmp_path):
+    from pakize.config import remove_replacement
+
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[asr_replacements]\n"rümut" = "remote"\n"Riitmi" = "README"\n', encoding="utf-8"
+    )
+
+    assert remove_replacement("rümut", path) is True
+    assert remove_replacement("rümut", path) is False
+    assert load_config(path).asr_replacements == {"Riitmi": "README"}
+
+
+def test_fix_remove_dosya_yoksa_false(tmp_path):
+    from pakize.config import remove_replacement
+
+    assert remove_replacement("x", tmp_path / "yok.toml") is False

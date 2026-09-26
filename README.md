@@ -243,6 +243,7 @@ ayarını değiştir.
 pakize book kitap.epub        # bir kitabı bölüm bölüm seslendir
 pakize dictate                # dikte: kaydet, metne çevir, panoya koy (ikinci çağrı bitirir)
 pakize transcribe kayit.wav   # bir ses dosyasındaki konuşmayı metne çevir
+pakize fix rümut remote       # dikte hep yanlış yazıyorsa: düzeltme tablosuna satır ekle
 pakize pause                  # çalmayı duraklat; duraklatılmışsa sürdür (aynı komut)
 pakize stop                   # çalmakta olan seslendirmeyi durdur
 pakize replay                 # en son üretilen sesi yeniden çal
@@ -509,6 +510,17 @@ asr_context = "Pakize'yi uv ile kuruyorum; seslendirmede edge-tts ve Piper var."
 "Yuvı" = "uv"
 "İpab" = "EPUB"
 ```
+
+Tabloya dosyayı açmadan satır eklemek için:
+
+```bash
+pakize fix Yuvı uv            # yazar; varsa üzerine yazar
+pakize fix --list             # tabloyu göster
+pakize fix --remove Yuvı      # satırı sil
+```
+
+Ekli biçimler ayrı satır ister: `rümut` için yazılan düzeltme `rümutu`yu
+yakalamaz, ona `pakize fix rümutu remote'u` gerekir.
 
 ### Bilinmesi gerekenler
 

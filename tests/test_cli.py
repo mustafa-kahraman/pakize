@@ -727,3 +727,70 @@ def test_pano_yazilamazsa_metin_yine_ekrandadir(dikte, monkeypatch):
     assert sonuc.exit_code == 1
     assert "merhaba dünya" in sonuc.stdout
     assert dikte["announced"] == ["xclip yok"]
+
+
+# --- fix ---------------------------------------------------------------------
+
+
+@pytest.fixture
+def duzeltme_dosyasi(tmp_path, monkeypatch) -> Path:
+    path = tmp_path / "config.toml"
+    monkeypatch.setattr(cli, "config_path", lambda: path)
+    return path
+
+
+def test_fix_tabloya_yazar(duzeltme_dosyasi):
+    sonuc = runner.invoke(cli.app, ["fix", "rümut", "remote"])
+
+    assert sonuc.exit_code == 0
+    assert "Yazıldı: rümut → remote" in sonuc.stdout
+    assert '"rümut" = "remote"' in duzeltme_dosyasi.read_text(encoding="utf-8")
+
+
+def test_fix_degisiklikte_eskisini_soyler(duzeltme_dosyasi):
+    runner.invoke(cli.app, ["fix", "rümut", "remot"])
+
+    sonuc = runner.invoke(cli.app, ["fix", "rümut", "remote"])
+
+    assert sonuc.exit_code == 0
+    assert "Değişti: rümut → remote (önce: remot)" in sonuc.stdout
+
+
+def test_fix_list_tabloyu_gosterir(duzeltme_dosyasi):
+    runner.invoke(cli.app, ["fix", "rümut", "remote"])
+
+    sonuc = runner.invoke(cli.app, ["fix", "--list"])
+
+    assert sonuc.exit_code == 0
+    assert "rümut  →  remote" in sonuc.stdout
+
+
+def test_fix_list_bos_tabloyu_soyler(duzeltme_dosyasi):
+    sonuc = runner.invoke(cli.app, ["fix", "--list"])
+
+    assert sonuc.exit_code == 0
+    assert "Düzeltme tablosu boş" in sonuc.stdout
+
+
+def test_fix_remove_siler(duzeltme_dosyasi):
+    runner.invoke(cli.app, ["fix", "rümut", "remote"])
+
+    sonuc = runner.invoke(cli.app, ["fix", "--remove", "rümut"])
+
+    assert sonuc.exit_code == 0
+    assert "Silindi: rümut" in sonuc.stdout
+    assert cli.load_config(duzeltme_dosyasi).asr_replacements == {}
+
+
+def test_fix_remove_olmayani_soyler(duzeltme_dosyasi):
+    sonuc = runner.invoke(cli.app, ["fix", "--remove", "yok"])
+
+    assert sonuc.exit_code == 1
+    assert "Tabloda yok: yok" in sonuc.stdout
+
+
+def test_fix_eksik_argumanla_kullanim_gosterir(duzeltme_dosyasi):
+    sonuc = runner.invoke(cli.app, ["fix", "rümut"])
+
+    assert sonuc.exit_code == 1
+    assert "Kullanım: pakize fix" in sonuc.output
