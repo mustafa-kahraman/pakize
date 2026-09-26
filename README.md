@@ -516,8 +516,8 @@ Deşifre gerçek zamandan yavaştır ve uzun kayıtta süre orantıdan hızlı b
 dikte kısa parçalar hâlinde (bir iki cümle) en iyi çalışır. Uzun bir metni
 bölüm bölüm dikte et.
 
-"Bitir" isteği sunucu hâlâ yüklenirken gelirse yükleme bitince işlenir; kayıt
-o kadar uzar, konuşma kaybolmaz.
+Kısa bir cümle söyleyip hemen bitirdiysen sunucu hâlâ yükleniyor olabilir:
+kayıt yine anında kapanır, "hazır" tonu yükleme bittikten sonra gelir.
 
 Kendi sunucunu ayakta tutmak istersen `asr_server_url = "http://127.0.0.1:8099"`
 yaz; Pakize o zaman sunucu açıp kapatmaz, olana bağlanır.

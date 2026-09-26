@@ -531,9 +531,9 @@ Transcription is slower than real time, and on long recordings the time grows
 faster than the length; dictation works best in short pieces (a sentence or
 two). Dictate a long text section by section.
 
-If the "finish" request arrives while the server is still loading, it is
-handled once loading completes; the recording runs that much longer, nothing
-said is lost.
+If you said one short sentence and finished right away, the server may still
+be loading: the recording still stops at once, the "done" tone follows once
+loading completes.
 
 To keep your own server running, set `asr_server_url = "http://127.0.0.1:8099"`;
 Pakize then neither starts nor stops a server, it connects to yours.

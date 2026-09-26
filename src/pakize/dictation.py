@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import IO, Callable, Iterator
 
 from . import audio, notices, runtime
-from .asr import asr_server, check_asr_setup, create_asr_engine
+from .asr import check_asr_setup, create_asr_engine, launch_asr_server
 from .config import Config
 from .engines import EngineError
 from .i18n import _
@@ -425,15 +425,16 @@ def dictate(
         say(_("Kayıt başladı. Bitirmek için komutu tekrar çalıştır (terminalde Ctrl+C)."))
         try:
             # Sunucu kayıt sürerken yüklenir; kullanıcı konuşurken geçer.
-            # Yükleme bitmeden gelen "bitir" isteği yükleme bitince işlenir:
-            # kayıt o kadar uzar, konuşma kaybolmaz.
-            with asr_server(config) as url:
+            # "Bitir" isteği yüklemeyi beklemez: kayıt hemen kapanır, hazır
+            # olması yalnız deşifreden önce beklenir.
+            with launch_asr_server(config) as server:
                 _wait_until_finished(recorder, stop_requested)
                 recording = recorder.stop()
                 audio.play(stop_tone)
                 say(_("Deşifre ediliyor..."))
+                server.wait_ready()
                 engine = create_asr_engine(
-                    config.asr_engine, replace(config, asr_server_url=url)
+                    config.asr_engine, replace(config, asr_server_url=server.url)
                 )
                 text = engine.transcribe(recording)
         finally:

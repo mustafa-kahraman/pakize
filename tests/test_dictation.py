@@ -344,6 +344,17 @@ class SahteMotor:
         return self.text
 
 
+class SahteSunucu:
+    """`launch_asr_server`'ın tutamacı; hazır olmanın ne zaman beklendiğini kaydeder."""
+
+    def __init__(self, url, events):
+        self.url = url
+        self.events = events
+
+    def wait_ready(self):
+        self.events.append("server-ready")
+
+
 @pytest.fixture
 def desifre(monkeypatch):
     """Sunucu ve motoru yamalar; sunucunun açılış-kapanışını kaydeder."""
@@ -353,12 +364,12 @@ def desifre(monkeypatch):
     def fake_server(config):
         state["events"].append("server-up")
         try:
-            yield state["url"]
+            yield SahteSunucu(state["url"], state["events"])
         finally:
             state["events"].append("server-down")
 
     monkeypatch.setattr(dictation, "check_asr_setup", lambda config: None)
-    monkeypatch.setattr(dictation, "asr_server", fake_server)
+    monkeypatch.setattr(dictation, "launch_asr_server", fake_server)
     monkeypatch.setattr(
         dictation, "create_asr_engine", lambda name, config: state["motor"]
     )
@@ -391,9 +402,33 @@ def test_dikte_sirasi_ton_kayit_desifre_teslim_ton(
     assert text == "merhaba dünya"
     assert delivered == ["merhaba dünya"]
     assert [path.name.split("-")[0] for path in calinanlar] == ["start", "stop", "done"]
-    assert desifre["events"] == ["server-up", "server-down"]
+    assert desifre["events"] == ["server-up", "server-ready", "server-down"]
     assert desifre["motor"].transcribed[0].name == "recording.wav"
     assert ffmpeg["processes"][0].stdin.written == b"q"
+
+
+def test_bitir_istegi_sunucunun_hazir_olmasini_beklemez(
+    linux, ffmpeg, desifre, calinanlar, uretilen_tonlar, ikinci_basis, monkeypatch
+):
+    """Kısa konuşmada model hâlâ yükleniyor olabilir; kayıt yine de hemen kapanır."""
+    original_stop = Recorder.stop
+
+    def recording_stop(self):
+        desifre["events"].append("recording-stopped")
+        return original_stop(self)
+
+    monkeypatch.setattr(Recorder, "stop", recording_stop)
+    monkeypatch.setattr(
+        dictation.audio,
+        "play",
+        lambda path: desifre["events"].append(path.name.split("-")[0]),
+    )
+
+    dictation.dictate(Config(), deliver=lambda text: None)
+
+    assert desifre["events"] == [
+        "start", "server-up", "recording-stopped", "stop", "server-ready", "server-down", "done"
+    ]
 
 
 def test_baslangic_tonu_kayittan_once_calinir(
@@ -519,7 +554,7 @@ def test_sunucu_acilamazsa_kayit_kesilir(
         yield
 
     monkeypatch.setattr(dictation, "check_asr_setup", lambda config: None)
-    monkeypatch.setattr(dictation, "asr_server", failing_server)
+    monkeypatch.setattr(dictation, "launch_asr_server", failing_server)
 
     with pytest.raises(AsrUnavailable):
         dictation.dictate(Config(), deliver=lambda t: None)

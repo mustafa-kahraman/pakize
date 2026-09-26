@@ -293,3 +293,52 @@ def test_ayar_dogrulamasi_olmayan_dosyayi_soyler(model_files, tmp_path):
 
     with pytest.raises(AsrUnavailable, match="asr_server_binary"):
         check_asr_setup(replace(model_files, asr_server_binary=tmp_path / "yok"))
+
+
+# --- başlat ve hazır-ol ayrı -------------------------------------------------
+
+
+def test_launch_hazir_olmayi_beklemez(model_files, launcher, monkeypatch):
+    from pakize.asr import launch_asr_server
+
+    launcher["ready"] = False
+    polls: list[str] = []
+    monkeypatch.setattr(server_module, "_responds", lambda url: polls.append(url) or False)
+
+    with launch_asr_server(model_files) as server:
+        assert server.url == "http://127.0.0.1:43210"
+        assert polls == []
+        assert launcher["processes"][0].signals == []
+
+    assert launcher["processes"][0].signals == ["terminate"]
+
+
+def test_wait_ready_hazir_olunca_doner(model_files, launcher):
+    from pakize.asr import launch_asr_server
+
+    with launch_asr_server(model_files) as server:
+        server.wait_ready()
+        server.wait_ready()
+
+        assert launcher["processes"][0].signals == []
+
+
+def test_wait_ready_sunucu_cokmusse_hata_verir_ve_kapatir(model_files, launcher):
+    from pakize.asr import launch_asr_server
+
+    with launch_asr_server(model_files) as server:
+        launcher["processes"][0].exit_code = 3
+        launcher["processes"][0].stdout.write(b"model yuklenemedi\n")
+
+        with pytest.raises(AsrError, match="çıkış kodu 3"):
+            server.wait_ready()
+
+
+def test_dis_sunucu_tutamaci_beklemez(launcher):
+    from pakize.asr import launch_asr_server
+
+    with launch_asr_server(replace(Config(), asr_server_url="http://127.0.0.1:8099")) as server:
+        server.wait_ready()
+        assert server.url == "http://127.0.0.1:8099"
+
+    assert launcher["processes"] == []

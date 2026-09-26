@@ -25,8 +25,9 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Iterator
+from typing import IO, Iterator, Protocol
 
 from ..config import Config
 from ..i18n import _
@@ -62,20 +63,53 @@ def asr_server(config: Config) -> Iterator[str]:
     """Deşifre sunucusunun adresini verir; gerekiyorsa sunucuyu açıp kapatır.
 
     `asr_server_url` doluysa o adres olduğu gibi verilir. Boşsa ve
-    `asr_model` tanımlıysa sunucu başlatılır, blok bitince kapatılır.
+    `asr_model` tanımlıysa sunucu başlatılır, hazır olması beklenir ve blok
+    bitince kapatılır.
+    """
+    with launch_asr_server(config) as server:
+        server.wait_ready()
+        yield server.url
+
+
+@contextlib.contextmanager
+def launch_asr_server(config: Config) -> Iterator[AsrServerHandle]:
+    """Sunucuyu başlatır ama hazır olmasını beklemez.
+
+    Dikte için: sunucu modeli yüklerken kayıt sürer ve "bitir" isteği
+    beklemeden işlenir; hazır olması yalnız deşifreden önce `wait_ready` ile
+    beklenir. Kapanış güvenceleri `asr_server` ile aynıdır.
     """
     if config.asr_server_url:
-        yield config.asr_server_url
+        yield ExternalServer(config.asr_server_url)
         return
 
     _require_model(config)
     with _termination_as_exit():
         server = LlamaServer(config)
-        server.start()
+        server.launch()
         try:
-            yield server.url
+            yield server
         finally:
             server.stop()
+
+
+class AsrServerHandle(Protocol):
+    """`launch_asr_server`'ın verdiği tutamaç."""
+
+    url: str
+
+    def wait_ready(self) -> None:
+        """Sunucu istek kabul edene kadar bekler; açılamazsa `AsrError`."""
+
+
+@dataclass
+class ExternalServer:
+    """Kullanıcının kendi ayakta tuttuğu sunucu; Pakize ona dokunmaz."""
+
+    url: str
+
+    def wait_ready(self) -> None:
+        return
 
 
 def check_asr_setup(config: Config) -> None:
@@ -145,11 +179,12 @@ class LlamaServer:
         self._log: IO[bytes] | None = None
 
     def start(self) -> None:
-        """Sunucuyu başlatır ve model yüklenene kadar bekler.
+        """Sunucuyu başlatır ve model yüklenene kadar bekler."""
+        self.launch()
+        self.wait_ready()
 
-        Beklerken hata olursa sunucu kapatılarak çıkılır; yarım açılmış bir
-        sunucu geride kalmaz.
-        """
+    def launch(self) -> None:
+        """Sunucu sürecini açar; hazır olmasını beklemez."""
         command = self._command()
         # Günlük boruya değil dosyaya yazılır: boru dolarsa sunucu yazarken
         # takılır, kimse okumadığı için de bir daha çözülmez.
@@ -168,6 +203,12 @@ class LlamaServer:
                 _("Deşifre sunucusu başlatılamadı: {reason}").format(reason=exc)
             ) from exc
 
+    def wait_ready(self) -> None:
+        """Model yüklenip istek kabul edilene kadar bekler.
+
+        Beklerken hata olursa sunucu kapatılarak çıkılır; yarım açılmış bir
+        sunucu geride kalmaz. Sunucu zaten hazırsa hemen döner.
+        """
         try:
             self._wait_ready()
         except BaseException:
