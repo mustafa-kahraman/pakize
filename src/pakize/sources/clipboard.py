@@ -1,8 +1,9 @@
-"""Pano içeriğini okuyan kaynak.
+"""Panoyu okuyan kaynak ve panoya yazan hedef.
 
-Panoyu okumanın tek bir yolu yok. macOS ve Windows'ta işletim sisteminin kendi
-aracı hazır gelir (`pbpaste`, PowerShell'in `Get-Clipboard`'ı). Linux'ta ise
-pencere sistemine bağlıdır: X11'de `xclip`/`xsel`, Wayland'de `wl-paste`.
+Panoya erişmenin tek bir yolu yok. macOS ve Windows'ta işletim sisteminin
+kendi aracı hazır gelir (`pbpaste`/`pbcopy`, PowerShell'in `Get-Clipboard` ve
+`Set-Clipboard`'ı). Linux'ta ise pencere sistemine bağlıdır: X11'de
+`xclip`/`xsel`, Wayland'de `wl-paste`/`wl-copy`.
 
 Bu modül kurulu araçların arasından en uygununu seçer: önce sistemin kendi
 aracı, sonra oturum tipine uyan araç, sonra kalanlar.
@@ -20,12 +21,12 @@ from ..platforms import IS_MACOS, IS_WINDOWS
 
 
 class ClipboardError(RuntimeError):
-    """Pano okunamadığında oluşan, kullanıcıya gösterilebilir hata."""
+    """Panoya erişilemediğinde oluşan, kullanıcıya gösterilebilir hata."""
 
 
 @dataclass(frozen=True)
-class _Reader:
-    """Panoyu okuyan tek bir harici araç."""
+class _Tool:
+    """Panoya erişen tek bir harici araç."""
 
     binary: str
     args: tuple[str, ...]
@@ -49,12 +50,30 @@ _POWERSHELL_ARGS = (
 )
 
 _READERS = (
-    _Reader("pbpaste", (), native=True),
-    _Reader("pwsh", _POWERSHELL_ARGS, native=True),
-    _Reader("powershell", _POWERSHELL_ARGS, native=True),
-    _Reader("wl-paste", ("--no-newline",), session="wayland"),
-    _Reader("xclip", ("-o", "-selection", "clipboard"), session="x11"),
-    _Reader("xsel", ("--clipboard", "--output"), session="x11"),
+    _Tool("pbpaste", (), native=True),
+    _Tool("pwsh", _POWERSHELL_ARGS, native=True),
+    _Tool("powershell", _POWERSHELL_ARGS, native=True),
+    _Tool("wl-paste", ("--no-newline",), session="wayland"),
+    _Tool("xclip", ("-o", "-selection", "clipboard"), session="x11"),
+    _Tool("xsel", ("--clipboard", "--output"), session="x11"),
+)
+
+_POWERSHELL_WRITE_ARGS = (
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    # Girdi konsolun kod sayfasıyla değil UTF-8 olarak okunmalı; yoksa Türkçe
+    # harfler panoya bozuk gider.
+    "[Console]::InputEncoding=[Text.Encoding]::UTF8; $input | Set-Clipboard",
+)
+
+_WRITERS = (
+    _Tool("pbcopy", (), native=True),
+    _Tool("pwsh", _POWERSHELL_WRITE_ARGS, native=True),
+    _Tool("powershell", _POWERSHELL_WRITE_ARGS, native=True),
+    _Tool("wl-copy", (), session="wayland"),
+    _Tool("xclip", ("-i", "-selection", "clipboard"), session="x11"),
+    _Tool("xsel", ("--clipboard", "--input"), session="x11"),
 )
 
 
@@ -63,7 +82,7 @@ def read_clipboard() -> str:
 
     Pano boşsa boş dizge döner; okuma aracı hiç yoksa `ClipboardError` fırlatır.
     """
-    readers = _available_readers()
+    readers = _available(_READERS)
     if not readers:
         raise ClipboardError(_install_hint())
 
@@ -76,6 +95,25 @@ def read_clipboard() -> str:
 
     raise ClipboardError(
         _("Pano okunamadı — {errors}").format(errors="; ".join(errors))
+    )
+
+
+def write_clipboard(text: str) -> None:
+    """Metni panoya koyar; yazma aracı hiç yoksa `ClipboardError` fırlatır."""
+    writers = _available(_WRITERS)
+    if not writers:
+        raise ClipboardError(_install_hint())
+
+    errors: list[str] = []
+    for writer in writers:
+        try:
+            _write_with(writer, text)
+            return
+        except ClipboardError as exc:
+            errors.append(f"{writer.binary}: {exc}")
+
+    raise ClipboardError(
+        _("Panoya yazılamadı — {errors}").format(errors="; ".join(errors))
     )
 
 
@@ -95,20 +133,20 @@ def _install_hint() -> str:
     )
 
 
-def _available_readers() -> list[_Reader]:
-    """Kurulu okuyucuları en uygun olan başta olacak şekilde sıralar.
+def _available(tools: tuple[_Tool, ...]) -> list[_Tool]:
+    """Kurulu araçları en uygun olan başta olacak şekilde sıralar.
 
     Sistemin kendi aracı önce gelir: macOS'ta XQuartz ile birlikte `xclip` de
     kurulu olabilir, ama orada doğru cevabı veren `pbpaste`'tir.
     """
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    installed = [reader for reader in _READERS if shutil.which(reader.binary)]
+    installed = [tool for tool in tools if shutil.which(tool.binary)]
     return sorted(
-        installed, key=lambda reader: (not reader.native, reader.session != session)
+        installed, key=lambda tool: (not tool.native, tool.session != session)
     )
 
 
-def _read_with(reader: _Reader) -> str:
+def _read_with(reader: _Tool) -> str:
     try:
         result = subprocess.run(
             reader.command(),
@@ -134,6 +172,32 @@ def _read_with(reader: _Reader) -> str:
         )
 
     return result.stdout or ""
+
+
+def _write_with(writer: _Tool, text: str) -> None:
+    """Metni tek bir araçla panoya yazar.
+
+    Çıktı boruya bağlanmaz: `xclip` ve `wl-copy` panoyu sunmak için arka
+    planda bir kopya bırakır ve bu kopya boruyu açık tutar; Pakize çıktının
+    bitmesini beklerken sonsuza dek takılırdı. Hata yalnız çıkış kodundan
+    anlaşılır.
+    """
+    try:
+        result = subprocess.run(
+            writer.command(),
+            input=text.encode("utf-8"),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
+    except OSError as exc:
+        raise ClipboardError(str(exc)) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ClipboardError(_("araç yanıt vermedi")) from exc
+
+    if result.returncode != 0:
+        raise ClipboardError(_("çıkış kodu {code}").format(code=result.returncode))
 
 
 def _is_empty_clipboard_error(stderr: str) -> bool:

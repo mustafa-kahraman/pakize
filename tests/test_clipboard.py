@@ -172,3 +172,65 @@ def test_zaman_asimi_hataya_cevrilir(kurulu, monkeypatch):
 
     with pytest.raises(ClipboardError, match="yanıt vermedi"):
         read_clipboard()
+
+
+# --- panoya yazma ------------------------------------------------------------
+
+
+def test_metin_panoya_yazilir(kurulu, calistirilan):
+    from pakize.sources.clipboard import write_clipboard
+
+    kurulu("xclip")
+
+    write_clipboard("dikte metni")
+
+    assert calistirilan.kayit == [["xclip", "-i", "-selection", "clipboard"]]
+
+
+def test_yazarken_cikti_boruya_baglanmaz(kurulu, monkeypatch):
+    """xclip/wl-copy arka planda kalır; boru açık kalsa Pakize sonsuza dek beklerdi."""
+    from pakize.sources.clipboard import write_clipboard
+
+    kurulu("wl-copy", session="wayland")
+    seen: dict = {}
+
+    def sahte_run(command, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(clipboard.subprocess, "run", sahte_run)
+
+    write_clipboard("ağırlık")
+
+    assert seen["input"] == "ağırlık".encode()
+    assert seen["stdout"] is subprocess.DEVNULL
+    assert seen["stderr"] is subprocess.DEVNULL
+
+
+def test_wayland_oturumunda_wl_copy_tercih_edilir(kurulu, calistirilan):
+    from pakize.sources.clipboard import write_clipboard
+
+    kurulu("xclip", "wl-copy", session="wayland")
+
+    write_clipboard("x")
+
+    assert calistirilan.kayit[0][0] == "wl-copy"
+
+
+def test_yazma_araci_yoksa_kurulum_ipucu(kurulu):
+    from pakize.sources.clipboard import write_clipboard
+
+    kurulu()
+
+    with pytest.raises(ClipboardError, match="xclip"):
+        write_clipboard("x")
+
+
+def test_yazma_basarisizsa_cikis_kodu_bildirilir(kurulu, calistirilan):
+    from pakize.sources.clipboard import write_clipboard
+
+    kurulu("xsel")
+    calistirilan.sonuclar["xsel"] = SimpleNamespace(returncode=1, stdout="", stderr="")
+
+    with pytest.raises(ClipboardError, match="xsel: çıkış kodu 1"):
+        write_clipboard("x")
