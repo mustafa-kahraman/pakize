@@ -18,7 +18,7 @@ tables, links and formatting marks according to a policy you control.
 - **Sources** — file, clipboard, stdin, or a Claude Code session transcript
 - **Books** — narrates EPUB/PDF/MOBI chapter by chapter, resumes if interrupted
 - **Translation** — translates to a target language before speaking
-- **Engines** — edge-tts (online, high quality), falls back to Piper when offline
+- **Engines** — edge-tts (online, high quality), falls back to Piper when offline; EMA for fully local Turkish
 - **Control** — read, pause and stop from a keyboard shortcut
 - **Dictation** — speak, press a key, the text is on your clipboard; local model, no network
 - **Platforms** — Linux, macOS and Windows
@@ -36,7 +36,8 @@ tables, links and formatting marks according to a policy you control.
 > of those companies do not contemplate third-party use. This tool is intended
 > for personal use; evaluating it for commercial or heavy use is on you. For a
 > fully local alternative that needs no network, see
-> [Offline fallback: Piper](#offline-fallback-piper).
+> [Offline fallback: Piper](#offline-fallback-piper) and
+> [Offline Turkish engine: EMA Lightning](#offline-turkish-engine-ema-lightning).
 
 ## Installation
 
@@ -169,6 +170,7 @@ corresponding feature:
 | `calibre` | narrating EPUB/PDF/MOBI | `sudo apt install calibre` | `brew install --cask calibre` | `winget install calibre.calibre` |
 | clipboard tool | `--clipboard` | `sudo apt install xclip` | ships with the OS (`pbpaste`) | ships with the OS (PowerShell) |
 | `piper` | offline fallback engine | `uv tool install piper-tts` | same | same |
+| EMA environment | offline Turkish engine `ema` | see [EMA](#offline-turkish-engine-ema-lightning) | same | same |
 
 When Pakize runs into a missing tool it prints the install command **for the
 platform you are on**; you can run the command from the error message as-is.
@@ -907,6 +909,62 @@ internally.
 If neither engine works, **the primary engine's** error is shown; the fallback's
 "not installed" message would have hidden the real problem.
 
+## Offline Turkish engine: EMA Lightning
+
+[EMA Lightning](https://huggingface.co/canberkkkkkk/ema-lightning) is a Turkish
+TTS model that runs locally on the CPU: Turkish only, a single voice, no
+network. Its Turkish sounds more natural than Piper's; in exchange it waits for
+the model to load on every run and its installation is larger.
+
+EMA needs torch, and Pakize itself carries no heavy machine-learning
+dependencies. So EMA is installed into **a separate Python environment**, and
+Pakize runs that environment's interpreter as a subprocess. The same two
+commands on all three platforms (on Windows, write an explicit path instead of
+`~`):
+
+```bash
+uv venv ~/.local/share/pakize-ema
+uv pip install --python ~/.local/share/pakize-ema ema-lightning==1.0.1 torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+```
+
+Then put the interpreter's path into the config:
+
+```toml
+engine = "ema"
+ema_python = "~/.local/share/pakize-ema/bin/python"   # Windows: ~/.local/share/pakize-ema/Scripts/python.exe
+```
+
+To use it only as the fallback, set `fallback_engine = "ema"`; for a single run,
+pass `--engine ema`. The defaults do not change: `edge` primary, `piper` fallback.
+
+The cost:
+
+- About **3 seconds of startup** on every run (importing torch and loading the
+  model). One worker process runs for the duration of a run, the chunks go to
+  it in order, and it exits when the job ends — on success, on error and on
+  Ctrl+C. Nothing stays resident in the background.
+- About **430 MB** of installation (351 MB of it is the CPU build of torch).
+- On first use the model files are downloaded (about 34 MB); afterwards they
+  come from the Hugging Face cache and no network is needed. If the setup is
+  missing or the model cannot be loaded, Pakize falls back to the other engine
+  and says why.
+
+Speed comes from the same `rate` field and is passed through as-is (1.15 = 15%
+faster). EMA accepts the range 0.25–4; a value outside it is not silently
+clamped but rejected with a clear error. EMA is 7–8 dB quieter than Piper, so
+every chunk is normalized to a peak of 0.95 and then multiplied by `volume`.
+The output is 48 kHz mono WAV; if the target is `.mp3` it is converted during
+concatenation.
+
+**Security note.** The `ema-lightning` package opens the model with
+`torch.load(weights_only=False)` and downloads its files without pinning a
+version; the former lets code inside the pickle file run. Pakize does not do
+that: the model files are downloaded from Hugging Face at a **pinned
+revision**, their **sha256** is verified, and they are always loaded in
+**safe mode** (`weights_only=True`). Because this path relies on the package's
+internal functions, the installed version must be exactly 1.0.1; with any other
+version Pakize refuses to load and prints the install command.
+
 ## Decimal numbers
 
 In Turkish the decimal separator is a comma. Written as `1.15`, it is read
@@ -945,7 +1003,7 @@ text
   → parsing/markdown.py   block detection (code, table, heading, list, quote)
   → parsing/policy.py     read/announce/skip per type + inline normalization
   → chunking.py           packing at sentence boundaries, up to a character limit
-  → engines/              TTS adapter (edge; a fallback engine can be plugged in)
+  → engines/              TTS adapters (edge, piper, ema; ema runs a worker in a separate env)
   → audio.py              concatenation and playback via ffmpeg
 ```
 

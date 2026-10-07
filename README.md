@@ -18,7 +18,7 @@ işaretlerini de politikaya göre eler.
 - **Kaynaklar** — dosya, pano, stdin ya da Claude Code oturum kaydı
 - **Kitap** — EPUB/PDF/MOBI'yi bölüm bölüm seslendirir, yarıda kalırsa devam eder
 - **Çeviri** — seslendirmeden önce hedef dile çevirir
-- **Motorlar** — edge-tts (çevrimiçi, kaliteli), ağ yoksa Piper'a düşer
+- **Motorlar** — edge-tts (çevrimiçi, kaliteli), ağ yoksa Piper'a düşer; tamamen yerel Türkçe için EMA
 - **Denetim** — klavye kısayoluyla oku, duraklat, durdur
 - **Dikte** — konuş, tuşa bas, metin panoda; tanıma yerel modelle, ağ gerekmez
 - **Platformlar** — Linux, macOS ve Windows
@@ -30,7 +30,8 @@ işaretlerini de politikaya göre eler.
 > şirketlerin kullanım şartları üçüncü taraf kullanımını öngörmez. Kişisel
 > kullanım için düşünülmüştür; ticari ya da yoğun kullanım öncesinde bunu
 > değerlendirmek sana düşer. Ağ gerektirmeyen tam yerel bir alternatif için
-> [Piper](#çevrimdışı-yedek-piper) bölümüne bak.
+> [Piper](#çevrimdışı-yedek-piper) ve [EMA](#çevrimdışı-türkçe-motor-ema-lightning)
+> bölümlerine bak.
 
 ## Kurulum
 
@@ -163,6 +164,7 @@ karşılarındaki aracı da kur:
 | `calibre` | EPUB/PDF/MOBI seslendirme | `sudo apt install calibre` | `brew install --cask calibre` | `winget install calibre.calibre` |
 | pano aracı | `--clipboard` | `sudo apt install xclip` | sistemle gelir (`pbpaste`) | sistemle gelir (PowerShell) |
 | `piper` | çevrimdışı yedek motor | `uv tool install piper-tts` | aynı | aynı |
+| EMA ortamı | çevrimdışı Türkçe motor `ema` | bkz. [EMA](#çevrimdışı-türkçe-motor-ema-lightning) | aynı | aynı |
 
 Pakize eksik bir araçla karşılaştığında **bulunduğun platformun** kurulum
 komutunu söyler; hata mesajındaki komutu olduğu gibi çalıştırabilirsin.
@@ -881,6 +883,58 @@ Hız ayarı her iki motorda da aynı `rate` alanından gelir — Piper hızı s�
 İki motor da çalışmazsa **birincil motorun** hatası gösterilir; yedeğin
 "kurulu değil" mesajı asıl sorunu gizlerdi.
 
+## Çevrimdışı Türkçe motor: EMA Lightning
+
+[EMA Lightning](https://huggingface.co/canberkkkkkk/ema-lightning) yerelde,
+CPU'da çalışan Türkçe bir TTS modelidir: yalnızca Türkçe, tek ses, ağ gerekmez.
+Türkçe doğallığı Piper'ın üstündedir; karşılığında her seslendirmede modelin
+yüklenmesini bekler ve kurulumu daha büyüktür.
+
+EMA torch ister; Pakize'nin kendisi ağır makine öğrenmesi bağımlılıkları
+taşımaz. Bu yüzden EMA **ayrı bir Python ortamına** kurulur ve Pakize o ortamın
+yorumlayıcısını alt süreç olarak çağırır. Üç platformda da aynı iki komut
+(Windows'ta `~` yerine açık bir yol yaz):
+
+```bash
+uv venv ~/.local/share/pakize-ema
+uv pip install --python ~/.local/share/pakize-ema ema-lightning==1.0.1 torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+```
+
+Sonra config'e yorumlayıcının yolunu yaz:
+
+```toml
+engine = "ema"
+ema_python = "~/.local/share/pakize-ema/bin/python"   # Windows: ~/.local/share/pakize-ema/Scripts/python.exe
+```
+
+Yalnızca yedek olarak kullanmak için `fallback_engine = "ema"`, tek seferlik
+için `--engine ema`. Varsayılanlar değişmez: `edge` birincil, `piper` yedek.
+
+Bedeli:
+
+- Her seslendirmede yaklaşık **3 saniye açılış** (torch ve modelin yüklenmesi).
+  Bir seslendirme boyunca tek bir işçi süreç çalışır, parçalar ona sırayla
+  gider, iş bitince kapanır — başarıda, hatada ve Ctrl+C'de. Arkada sürekli
+  duran bir şey yoktur.
+- Kurulum yaklaşık **430 MB** (351 MB'ı torch'un CPU sürümü).
+- İlk kullanımda model dosyaları indirilir (yaklaşık 34 MB); sonra Hugging Face
+  önbelleğinden gelir, ağ gerekmez. Kurulum eksikse ya da model yüklenemezse
+  Pakize yedek motora geçer ve sebebini söyler.
+
+Hız aynı `rate` alanından gelir ve olduğu gibi geçer (1.15 = %15 hızlı). EMA
+0.25–4 aralığını kabul eder; dışındaki değer sessizce kırpılmaz, açık hata
+verir. EMA Piper'dan 7–8 dB kısık çıktığı için her parça tepe 0.95'e normalize
+edilir, sonra `volume` ile çarpılır. Çıktı 48 kHz mono WAV'dır; hedef `.mp3`
+ise birleştirmede dönüştürülür.
+
+**Güvenlik notu.** `ema-lightning` paketi modeli `torch.load(weights_only=False)`
+ile açar ve dosyaları sürüm sabitlemeden indirir; ilki pickle dosyasının
+içindeki kodun çalışmasına izin verir. Pakize bunu yapmaz: model dosyaları
+Hugging Face'ten **sabit bir revizyondan** indirilir, **sha256**'ları doğrulanır
+ve her zaman **güvenli kipte** (`weights_only=True`) yüklenir. Bu yol paketin iç
+fonksiyonlarına dayandığı için kurulu sürüm tam olarak 1.0.1 olmalı; başka
+sürümde Pakize yüklemeyi reddeder ve kurulum komutunu söyler.
+
 ## Ondalık sayılar
 
 Türkçe'de ondalık ayracı virgüldür. `1.15` yazımı TTS motoruna Türkçe
@@ -914,7 +968,7 @@ metin
   → parsing/markdown.py   blok tespiti (kod, tablo, başlık, liste, alıntı)
   → parsing/policy.py     her tipe oku/anons/atla + satır içi normalizasyon
   → chunking.py           cümle sınırında, karakter limitine göre paketleme
-  → engines/              TTS adaptörü (edge; yedek motor takılabilir)
+  → engines/              TTS adaptörleri (edge, piper, ema; ema ayrı ortamda işçi süreç)
   → audio.py              ffmpeg ile birleştirme ve çalma
 ```
 
