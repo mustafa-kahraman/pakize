@@ -8,6 +8,8 @@ ağır kütüphaneler yalnızca fonksiyon içinde ithal edildiği için.
 
 import io
 import json
+import struct
+import subprocess
 import sys
 import types
 import wave
@@ -141,6 +143,77 @@ def test_render_pcm_numpysiz_calisir():
     assert pcm == isci.to_pcm16([0.95, -0.95])
 
 
+class SahteDizi:
+    """numpy dizisinin, `render_pcm`'in kullandığı kadarını taklit eder."""
+
+    def __init__(self, degerler) -> None:
+        self.degerler = [float(d) for d in degerler]
+
+    @property
+    def size(self) -> int:
+        return len(self.degerler)
+
+    def reshape(self, *_shape) -> "SahteDizi":
+        return self
+
+    def __mul__(self, carpan: float) -> "SahteDizi":
+        return SahteDizi([d * carpan for d in self.degerler])
+
+    def max(self) -> float:
+        return max(self.degerler)
+
+    def round(self) -> "SahteDizi":
+        return SahteDizi([round(d) for d in self.degerler])
+
+    def astype(self, dtype: str) -> "SahteDizi":
+        assert dtype == "<i2"
+        for d in self.degerler:
+            assert -32768 <= d <= 32767, f"16 bit taşması: {d} (kırpma yapılmamış)"
+        return self
+
+    def tobytes(self) -> bytes:
+        return struct.pack(f"<{len(self.degerler)}h", *(int(d) for d in self.degerler))
+
+
+@pytest.fixture
+def sahte_numpy(monkeypatch):
+    np = types.ModuleType("numpy")
+    np.float32 = "float32"
+    np.asarray = lambda a, dtype=None: SahteDizi(a)
+    np.abs = lambda a: SahteDizi([abs(d) for d in a.degerler])
+    np.clip = lambda a, lo, hi: SahteDizi([min(hi, max(lo, d)) for d in a.degerler])
+    monkeypatch.setitem(sys.modules, "numpy", np)
+    return np
+
+
+def test_numpy_yolu_volume_ile_carpar(sahte_numpy):
+    assert isci.render_pcm([0.5], 0.5) == isci.to_pcm16([0.475])
+    assert isci.render_pcm([0.5, -0.25], 1.0) == isci.to_pcm16([0.95, -0.475])
+
+
+def test_numpy_yolu_asan_degerleri_kirpar(sahte_numpy):
+    assert isci.render_pcm([0.5, -0.5], 2.0) == isci.to_pcm16([1.0, -1.0])
+
+
+def test_numpy_yolu_sessiz_parcada_sifira_bolmez(sahte_numpy):
+    assert isci.render_pcm([0.0, 0.0], 1.0) == isci.to_pcm16([0.0, 0.0])
+    assert isci.render_pcm([], 1.0) == b""
+
+
+def test_torch_tensoru_numpy_dizisine_cevrilir(sahte_numpy):
+    class SahteTensor:
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def numpy(self):
+            return [0.5]
+
+    assert isci.render_pcm(SahteTensor(), 1.0) == isci.to_pcm16([0.95])
+
+
 def test_wav_48khz_mono_16bit(tmp_path):
     hedef = tmp_path / "parca.wav"
 
@@ -258,6 +331,26 @@ def test_yukleme_hata_verse_de_torch_load_geri_alinir(sahte_kutuphaneler, tmp_pa
     assert sahte_kutuphaneler.torch.load is sahte_kutuphaneler.orijinal_load
 
 
+def test_model_hazirlanirken_once_surum_denetlenir(monkeypatch):
+    """Yanlış sürüm, paket eksikliğinden (huggingface_hub yok) önce yakalanmalı."""
+    monkeypatch.setattr(isci, "installed_version", lambda *a: "1.0.2")
+
+    with pytest.raises(isci.SetupError) as hata:
+        isci.prepare_model()
+
+    assert hata.value.code == "wrong_version"
+
+
+def test_surum_dogruysa_eksik_kutuphane_bildirilir(monkeypatch):
+    monkeypatch.setattr(isci, "installed_version", lambda *a: "1.0.1")
+    monkeypatch.setitem(sys.modules, "huggingface_hub", None)  # ithal ImportError verir
+
+    with pytest.raises(isci.SetupError) as hata:
+        isci.prepare_model()
+
+    assert hata.value.code == "missing_package"
+
+
 # --- protokol ----------------------------------------------------------------
 
 
@@ -342,6 +435,81 @@ def test_kurulum_hatasi_mesaji_kodu_tasir():
         "error": "ayrıntı",
         "installed": "1.0.2",
     }
+
+
+BASLATICI = '''
+import importlib.util, os, sys, types
+spec = importlib.util.spec_from_file_location("ema_worker", {worker!r})
+isci = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(isci)
+
+
+class SahteTts:
+    def say(self, text, *, speed, seed, sample_rate):
+        print("torch gürültüsü: print üzerinden")      # sys.stdout
+        os.write(1, b"C gurultusu: 1 numarali tanitici\\n")  # fd 1
+        return types.SimpleNamespace(audio=[0.5, -0.5], sample_rate=sample_rate)
+
+
+def sahte_prepare_model():
+    print("model yuklenirken gurultu")
+    os.write(1, b"acilista fd gurultusu\\n")
+    return SahteTts()
+
+
+isci.prepare_model = sahte_prepare_model
+sys.exit(isci.main())
+'''
+
+
+def test_gercek_isci_gurultuyu_protokol_akisina_karistirmaz(tmp_path):
+    """Gerçek işçi kodu (`main`, `claim_stdout`, `serve`) alt süreçte çalışır.
+
+    Model yerine sahte bir TTS verilir; o hem `print` ile hem 1 numaralı
+    tanıtıcıya doğrudan yazarak gürültü üretir. stdout'ta yalnızca protokol
+    satırları kalmalı, gürültü stderr'e gitmeli.
+    """
+    baslatici = tmp_path / "baslatici.py"
+    baslatici.write_text(BASLATICI.format(worker=str(Path(isci.__file__))), encoding="utf-8")
+    hedef = tmp_path / "parca.wav"
+    istek = json.dumps({"text": "Merhaba", "out": str(hedef), "speed": 1.0, "volume": 1.0})
+
+    sonuc = subprocess.run(
+        [sys.executable, "-I", str(baslatici)],
+        input=(istek + "\n").encode("utf-8"),
+        capture_output=True,
+        timeout=60,
+    )
+
+    assert sonuc.returncode == 0, sonuc.stderr.decode(errors="replace")
+    satirlar = [json.loads(s) for s in sonuc.stdout.decode("utf-8").splitlines()]
+    assert satirlar == [{"ready": True}, {"ok": True}]
+    stderr = sonuc.stderr.decode("utf-8", errors="replace")
+    for gurultu in (
+        "torch gürültüsü: print üzerinden",
+        "C gurultusu: 1 numarali tanitici",
+        "model yuklenirken gurultu",
+        "acilista fd gurultusu",
+    ):
+        assert gurultu in stderr
+    with wave.open(str(hedef), "rb") as okuyucu:
+        assert okuyucu.readframes(2) == isci.to_pcm16([0.95, -0.95])
+
+
+def test_gercek_isci_acilis_hatasini_protokolle_bildirir(tmp_path):
+    """Sürüm denetimi gerçek işçide: paket yoksa `missing_package` satırı ve çıkış 1."""
+    sonuc = subprocess.run(
+        [sys.executable, "-I", str(Path(isci.__file__))],
+        input=b"",
+        capture_output=True,
+        timeout=60,
+    )
+
+    assert sonuc.returncode == 1
+    satirlar = [json.loads(s) for s in sonuc.stdout.decode("utf-8").splitlines()]
+    assert len(satirlar) == 1
+    assert satirlar[0]["ready"] is False
+    assert satirlar[0]["code"] == "missing_package"
 
 
 def test_isci_pakizeyi_ithal_etmez():
