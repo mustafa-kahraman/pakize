@@ -955,7 +955,9 @@ Speed comes from the same `rate` field and is passed through as-is (1.15 = 15%
 faster). EMA accepts the range 0.25–4; a value outside it is not silently
 clamped but rejected with a clear error. EMA is 7–8 dB quieter than Piper, so
 every chunk is normalized to a peak of 0.95 and then multiplied by `volume`;
-a short fade-out and 250 ms of silence are appended to each chunk. `pitch_hz`
+a short fade-out and 0.85 s of silence are appended to each chunk (as long
+as edge's own tail — in streaming mode each chunk is played by its own ffplay,
+and a shorter tail produced a click when the audio device closed). `pitch_hz`
 works only with the edge engine; EMA and Piper ignore it. The output is 48 kHz
 mono WAV; if the target is `.mp3` it is converted during concatenation.
 

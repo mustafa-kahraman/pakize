@@ -68,14 +68,19 @@ SEED = 0
 """Sabit tohum: aynı metin her seferinde aynı sesi versin."""
 
 FADE_OUT_SECONDS = 0.015
-TAIL_SILENCE_SECONDS = 0.25
+TAIL_SILENCE_SECONDS = 0.85
 """Parça sonu: kısa bir sönüm, ardından sessizlik.
 
 EMA parçayı son kelimenin hemen ardından, düzey hâlâ sıfır değilken bitiriyor
-(ölçüm: son 50 ms'de 0.0005–0.0075); akıcı modda her parça ayrı bir ffplay ile
-çalındığı için kapanışta cızırtı duyuluyor. 15 ms'lik kosinüs sönümü sesi
-sıfıra indirir, 250 ms sessizlik ise edge'in doğal parça sonu boşluğuna yakın
-bir nefes payı bırakır.
+(ölçüm: son 50 ms'de 0.0005–0.0075); 15 ms'lik kosinüs sönümü sesi sıfıra
+indirir.
+
+Sessizlik süresi dinleme testiyle seçildi. Akıcı modda her parça ayrı bir
+ffplay ile çalınır ve ffplay parça bitince ses aygıtını kapatır; cızırtı
+modelden ya da dosyadan değil, aygıt kapanırken sesin hâlâ sürmesinden
+çıkıyor. Aynı dosyada: sessizlik yok → cızırtı var; 250 ms → azaldı ama var;
+~850 ms (edge dosyalarının sonundaki kuyruk kadar, ölçülen 840–876 ms) →
+cızırtı yok. 48 kHz'de 0.85 sn tam 40800 örnek eder.
 """
 
 SPEED_MIN = 0.25

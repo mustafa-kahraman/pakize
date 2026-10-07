@@ -145,7 +145,7 @@ def test_render_pcm_numpysiz_calisir():
     pcm = isci.render_pcm([0.5, -0.5], 1.0)
 
     # Son 15 ms sönümlenir: iki örneklik parçada ilki yarıya iner, ikincisi sıfırlanır;
-    # ardından 250 ms sessizlik gelir.
+    # ardından TAIL_SILENCE_SECONDS kadar sessizlik gelir.
     ornekler = _ornekler(pcm)
     assert ornekler[:2] == [round(0.95 * 0.5 * 32767), 0]
     assert len(ornekler) == 2 + isci.tail_silence_count()
@@ -242,13 +242,14 @@ def test_torch_tensoru_numpy_dizisine_cevrilir(sahte_numpy):
 
 
 def _parca_sonu_dogrula(ornekler: list[int], orijinal_uzunluk: int) -> None:
-    """Üç koruma: 250 ms tam sessizlik, tekdüze sönüm ve sıfırda biten ses, uzunluk."""
+    """Üç koruma: kuyruk tam sessizlik, tekdüze sönüm ve sıfırda biten ses, uzunluk."""
     sessiz = isci.tail_silence_count()
     sonum = int(round(isci.FADE_OUT_SECONDS * isci.SAMPLE_RATE))
-    assert sessiz == 12000 and sonum == 720
+    assert sessiz == round(isci.TAIL_SILENCE_SECONDS * isci.SAMPLE_RATE)
+    assert sonum == round(isci.FADE_OUT_SECONDS * isci.SAMPLE_RATE)
 
     assert len(ornekler) == orijinal_uzunluk + sessiz
-    assert ornekler[-sessiz:] == [0] * sessiz, "son 250 ms tam sıfır olmalı"
+    assert ornekler[-sessiz:] == [0] * sessiz, "kuyruk tam sıfır olmalı"
 
     sesli = ornekler[:orijinal_uzunluk]
     assert sesli[-1] == 0, "son sesli örnek sıfıra inmeli"
@@ -285,6 +286,14 @@ def test_sonumden_kisa_parca_numpy_yolunda_cokmez(sahte_numpy, uzunluk):
     ornekler = _ornekler(isci.render_pcm([0.5] * uzunluk, 1.0))
 
     assert len(ornekler) == uzunluk + isci.tail_silence_count()
+
+
+def test_kuyruk_sessizligi_edge_kuyrugu_kadar_ve_tam_ornek():
+    """Dinleme testi 0.85 sn'de karar kıldı; 48 kHz'de bu tam 40800 örnek, yuvarlama payı yok."""
+    assert isci.TAIL_SILENCE_SECONDS == 0.85
+    assert isci.FADE_OUT_SECONDS == 0.015
+    assert isci.tail_silence_count() == 40800
+    assert isci.tail_silence_count(24000) == 20400
 
 
 def test_sonum_carpanlari_birden_sifira_iner():

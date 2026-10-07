@@ -927,7 +927,8 @@ Hız aynı `rate` alanından gelir ve olduğu gibi geçer (1.15 = %15 hızlı). 
 0.25–4 aralığını kabul eder; dışındaki değer sessizce kırpılmaz, açık hata
 verir. EMA Piper'dan 7–8 dB kısık çıktığı için her parça tepe 0.95'e normalize
 edilir, sonra `volume` ile çarpılır; her parçanın sonuna kısa bir sönüm ve
-250 ms sessizlik eklenir. `pitch_hz` yalnızca edge motorunda çalışır; EMA ve
+0,85 sn sessizlik eklenir (edge'in kuyruğu kadar — akıcı modda her parçayı ayrı
+bir ffplay çaldığı için daha kısa kuyrukta aygıt kapanırken cızırtı duyuluyordu). `pitch_hz` yalnızca edge motorunda çalışır; EMA ve
 Piper bu ayarı yok sayar. Çıktı 48 kHz mono WAV'dır; hedef `.mp3` ise
 birleştirmede dönüştürülür.
 
