@@ -10,11 +10,13 @@ from ..config import Config
 from ..i18n import _
 from .base import EngineError, EngineUnavailable, TtsEngine
 from .edge import EdgeEngine
+from .ema import EmaEngine
 from .piper import PiperEngine
 
 _REGISTRY: dict[str, type[TtsEngine]] = {
     EdgeEngine.name: EdgeEngine,
     PiperEngine.name: PiperEngine,
+    EmaEngine.name: EmaEngine,
 }
 
 
@@ -41,6 +43,7 @@ __all__ = [
     "EngineUnavailable",
     "EdgeEngine",
     "PiperEngine",
+    "EmaEngine",
     "create_engine",
     "available_engines",
 ]

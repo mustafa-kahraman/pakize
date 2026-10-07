@@ -329,6 +329,8 @@ _EN: dict[str, str] = {
     "Piper ses modelinin (.onnx) yolu": "path of the Piper voice model (.onnx)",
     "piper çalıştırılabiliri; boşsa PATH'te aranır":
         "piper executable; searched on PATH when empty",
+    "EMA motorunun ayrı Python ortamındaki yorumlayıcısı; boşsa ema kullanılamaz":
+        "Python interpreter of the EMA engine's separate environment; ema unusable when empty",
     "kod blokları — okunmaz, kısaca anons edilir":
         "code blocks — not read, briefly announced",
     "Markdown tabloları": "Markdown tables",
@@ -384,6 +386,44 @@ _EN: dict[str, str] = {
         "piper not found. To install it: uv tool install piper-tts\n"
         'If installed, put its path in the config: piper_binary = "/path/piper"',
     "rate pozitif olmalı": "rate must be positive",
+    # --- ema motoru ---
+    "ema motoru için ayrı bir Python ortamı gerekli. Kurmak için:\n"
+    "  uv venv {env}\n"
+    "  {install}\n"
+    "sonra yorumlayıcının yolunu config'e yaz:\n"
+    '  ema_python = "{example}"':
+        "the ema engine needs a separate Python environment. To set it up:\n"
+        "  uv venv {env}\n"
+        "  {install}\n"
+        "then put the interpreter's path in the config:\n"
+        '  ema_python = "{example}"',
+    "ema_python ile gösterilen Python yok: {path}":
+        "the Python pointed to by ema_python is missing: {path}",
+    "ema seslendirme başarısız: {error}": "ema synthesis failed: {error}",
+    "ema boş ses dosyası üretti": "ema produced an empty audio file",
+    "rate {rate} EMA için geçersiz; {low} ile {high} arasında olmalı":
+        "rate {rate} is invalid for EMA; it must be between {low} and {high}",
+    "EMA işçisi başlatılamadı: {error}": "the EMA worker could not be started: {error}",
+    "EMA işçisi {seconds:.0f} sn içinde hazır olmadı.":
+        "the EMA worker was not ready within {seconds:.0f} s.",
+    "EMA işçisi açılırken kapandı (çıkış kodu {code}).":
+        "the EMA worker exited while starting (exit code {code}).",
+    "EMA işçisi seslendirme sırasında kapandı (çıkış kodu {code}).":
+        "the EMA worker exited during synthesis (exit code {code}).",
+    "EMA ortamında ({python}) gerekli paketler yok: {error}\nKurmak için:\n  {install}":
+        "the EMA environment ({python}) lacks the required packages: {error}\n"
+        "To install them:\n  {install}",
+    "ema-lightning {installed} kurulu; güvenli yükleme için tam olarak "
+    "{required} gerekli. Kurmak için:\n  {install}":
+        "ema-lightning {installed} is installed; safe loading needs exactly "
+        "{required}. To install it:\n  {install}",
+    "EMA model dosyaları indirilemedi (ilk kullanımda ağ gerekir): {error}":
+        "the EMA model files could not be downloaded (first use needs network): {error}",
+    "EMA model dosyası beklenen sha256 ile uyuşmuyor: {file}. "
+    "Dosya değişmiş olabilir; model yüklenmedi.":
+        "an EMA model file does not match the expected sha256: {file}. "
+        "The file may have changed; the model was not loaded.",
+    "EMA modeli yüklenemedi: {error}": "the EMA model could not be loaded: {error}",
     "Birleştirilecek ses parçası yok": "No audio chunks to concatenate",
     "ffplay hata verdi (kod {code}): {error}":
         "ffplay failed (code {code}): {error}",
