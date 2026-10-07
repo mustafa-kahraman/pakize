@@ -39,6 +39,9 @@ if MODE == "acilista_ol":
 if MODE == "surum_yanlis":
     print(json.dumps({{"ready": False, "code": "wrong_version", "installed": "1.0.2"}}), flush=True)
     sys.exit(1)
+if MODE == "paket_yok":
+    print(json.dumps({{"ready": False, "code": "missing_package", "error": "No module named 'torch'"}}), flush=True)
+    sys.exit(1)
 
 print(json.dumps({{"ready": True}}), flush=True)
 for raw in iter(sys.stdin.buffer.readline, b""):
@@ -235,6 +238,102 @@ def test_surum_yanlissa_kurulum_komutu_soylenir(config, kurulum, tmp_path):
 
     assert "ema-lightning==1.0.1" in str(hata.value)
     assert str(sys.executable) in str(hata.value)
+
+
+def test_paket_eksikse_ayri_ortam_onerilir(config, kurulum, tmp_path):
+    """Gösterilen Python sistem Python'u olabilir; torch'u oraya kurmayı önermemeli."""
+    engine = _motor(config, kurulum, mode="paket_yok")
+
+    with pytest.raises(EngineUnavailable, match="No module named 'torch'") as hata:
+        asyncio.run(engine.synthesize("metin", tmp_path / "a.wav"))
+
+    mesaj = str(hata.value)
+    assert f"uv venv {ema_modulu.ENV_DIR_EXAMPLE}" in mesaj
+    assert f"--python {ema_modulu.ENV_DIR_EXAMPLE} " in mesaj
+    assert f"--python {sys.executable}" not in mesaj
+
+
+def test_kurulum_komutu_cpu_torch_dizinini_tek_dizin_olarak_verir():
+    """`--index-url` + `--extra-index-url` ikilisi uv'de CUDA torch kurduruyordu."""
+    komut = ema_modulu.INSTALL_COMMAND
+
+    assert "--index https://download.pytorch.org/whl/cpu" in komut
+    assert "--extra-index-url" not in komut
+    assert "--index-url" not in komut
+    assert "ema-lightning==1.0.1" in komut
+
+
+def test_isci_ust_surec_olunce_kapanacak_sekilde_baslatilir(config, kurulum, tmp_path, monkeypatch):
+    """`die_with_parent` alt sürece `preexec_fn` olarak verilmeli (kill -9 güvencesi)."""
+    kayit: dict = {}
+    orijinal_exec = ema_modulu.asyncio.create_subprocess_exec
+
+    def isaret() -> None:
+        return None
+
+    async def kaydeden_exec(*command, **kwargs):
+        kayit["command"] = list(command)
+        kayit["kwargs"] = kwargs
+        return await orijinal_exec(*command, **kwargs)
+
+    monkeypatch.setattr(ema_modulu, "die_with_parent", lambda: isaret)
+    monkeypatch.setattr(ema_modulu.asyncio, "create_subprocess_exec", kaydeden_exec)
+    engine = _motor(config, kurulum)
+
+    async def senaryo():
+        await engine.synthesize("metin", tmp_path / "a.wav")
+        await engine.aclose()
+
+    asyncio.run(senaryo())
+
+    assert kayit["kwargs"]["preexec_fn"] is isaret
+    assert kayit["command"][:2] == [sys.executable, "-I"]
+
+
+def test_yanit_gecikirse_isci_kapatilir_ve_hata_verilir(config, kurulum, tmp_path, monkeypatch):
+    """Takılan işçi Pakize'yi sonsuza dek bekletmemeli."""
+    monkeypatch.setattr(ema_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
+    monkeypatch.setattr(ema_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
+    monkeypatch.setattr(ema_modulu, "STOP_GRACE_SECONDS", 0.2)
+    engine = _motor(config, kurulum)
+
+    async def senaryo():
+        try:
+            await engine.synthesize("BEKLE", tmp_path / "a.wav")
+        finally:
+            surec = engine._worker.process if engine._worker else None
+            await engine.aclose()
+        return surec
+
+    with pytest.raises(EngineError, match="0 sn içinde yanıt vermedi") as hata:
+        asyncio.run(senaryo())
+
+    assert "kapatıldı" in str(hata.value)
+    assert kurulum.bekleme_isareti.exists(), "işçi isteği almış olmalı"
+
+
+def test_yanit_zaman_asimi_isci_surecini_oldurur(config, kurulum, tmp_path, monkeypatch):
+    monkeypatch.setattr(ema_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
+    monkeypatch.setattr(ema_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
+    monkeypatch.setattr(ema_modulu, "STOP_GRACE_SECONDS", 0.2)
+    engine = _motor(config, kurulum)
+    surecler: list = []
+
+    async def senaryo():
+        gorev = asyncio.create_task(engine.synthesize("BEKLE", tmp_path / "a.wav"))
+        await kurulum.isci_beklemeye_gecsin()
+        surecler.append(engine._worker.process)
+        with pytest.raises(EngineError):
+            await gorev
+
+    asyncio.run(senaryo())
+
+    assert surecler[0].returncode is not None
+
+
+def test_yanit_suresi_parca_uzunluguyla_buyur():
+    assert ema_modulu.request_timeout("") == pytest.approx(60.0)
+    assert ema_modulu.request_timeout("x" * 2500) == pytest.approx(310.0)
 
 
 def test_acilis_hatasi_tekrar_isci_acmaz(config, kurulum, tmp_path):

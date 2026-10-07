@@ -924,7 +924,7 @@ commands on all three platforms (on Windows, write an explicit path instead of
 
 ```bash
 uv venv ~/.local/share/pakize-ema
-uv pip install --python ~/.local/share/pakize-ema ema-lightning==1.0.1 torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+uv pip install --python ~/.local/share/pakize-ema ema-lightning==1.0.1 torch --index https://download.pytorch.org/whl/cpu
 ```
 
 Then put the interpreter's path into the config:
@@ -943,7 +943,8 @@ The cost:
   model). One worker process runs for the duration of a run, the chunks go to
   it in order, and it exits when the job ends — on success, on error and on
   Ctrl+C. Nothing stays resident in the background.
-- About **430 MB** of installation (351 MB of it is the CPU build of torch).
+- About **400 MB** of installation (most of it the CPU build of torch; the
+  `--index` flag picks it over the multi-GB CUDA build on PyPI).
 - On first use the model files are downloaded (about 34 MB); afterwards they
   come from the Hugging Face cache and no network is needed. If the setup is
   missing or the model cannot be loaded, Pakize falls back to the other engine

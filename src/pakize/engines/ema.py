@@ -49,14 +49,29 @@ STOP_GRACE_SECONDS = 5.0
 LOG_TAIL_LINES = 15
 """İşçi çökerse hata mesajına eklenecek stderr satırı sayısı."""
 
+REQUEST_TIMEOUT_BASE = 60.0
+REQUEST_SECONDS_PER_CHAR = 0.1
+"""Bir parçanın yanıtı için azami bekleme: taban + karakter başına pay (saniye).
+
+CPU'da gerçek zaman oranı en kötü 0.3 civarı; 2500 karakterlik bir parça
+yaklaşık üç dakikalık ses, yani bir dakikadan az sentez demek. Bu formül ona
+310 saniye tanır: yük altındaki makinede bile cömert, takılmış işçide ise
+sonsuza dek beklemekten iyi.
+"""
+
 ENV_DIR_EXAMPLE = "~/.local/share/pakize-ema"
 
 INSTALL_COMMAND = (
     "uv pip install --python {python} ema-lightning==1.0.1 torch "
-    "--index-url https://download.pytorch.org/whl/cpu "
-    "--extra-index-url https://pypi.org/simple"
+    "--index https://download.pytorch.org/whl/cpu"
 )
-"""EMA ortamına paketleri kuran komut; `{python}` ortamın yolu ya da yorumlayıcısı."""
+"""EMA ortamına paketleri kuran komut; `{python}` ortamın yolu ya da yorumlayıcısı.
+
+`--index` (tek dizin) bilerek: `--index-url` + `--extra-index-url` ikilisinde
+uv PyPI'yı öne alır ve torch'un birkaç GB'lık CUDA sürümünü kurar. PyTorch'un
+CPU dizini ema-lightning'in diğer bağımlılıklarını da barındırmadığından uv
+eksikleri PyPI'dan tamamlar; ölçülen kurulum yaklaşık 400 MB.
+"""
 
 
 class EmaEngine(TtsEngine):
@@ -109,7 +124,7 @@ class EmaEngine(TtsEngine):
         async with self._lock:
             worker = await self._ensure_worker()
             try:
-                response = await worker.request(request)
+                response = await worker.request(request, request_timeout(text))
             except EngineError as exc:
                 self._failure = exc
                 raise
@@ -158,6 +173,11 @@ class EmaEngine(TtsEngine):
                     rate=rate, low=ema_worker.SPEED_MIN, high=ema_worker.SPEED_MAX
                 )
             ) from None
+
+
+def request_timeout(text: str) -> float:
+    """Parçanın uzunluğuna göre yanıt bekleme süresi (saniye)."""
+    return REQUEST_TIMEOUT_BASE + REQUEST_SECONDS_PER_CHAR * len(text)
 
 
 def _python_example() -> str:
@@ -221,16 +241,27 @@ class _Worker:
             raise EngineUnavailable(_setup_message(message, self.python) + self._log_tail())
         self.ready = True
 
-    async def request(self, request: dict[str, Any]) -> dict[str, Any]:
-        """Bir isteği yazar, yanıt satırını döner; işçi ölmüşse `EngineError`."""
+    async def request(self, request: dict[str, Any], timeout: float) -> dict[str, Any]:
+        """Bir isteği yazar, yanıt satırını döner.
+
+        İşçi ölmüşse ya da `timeout` saniye içinde yanıt vermezse `EngineError`;
+        takılan işçi kapatılır ki geride süreç kalmasın.
+        """
         process = self.process
         assert process is not None and process.stdin is not None
         try:
             process.stdin.write((json.dumps(request) + "\n").encode("utf-8"))
             await process.stdin.drain()
-            line = await process.stdout.readline()
+            line = await asyncio.wait_for(process.stdout.readline(), timeout)
         except (BrokenPipeError, ConnectionResetError):
             line = b""
+        except asyncio.TimeoutError:
+            await self.stop()
+            raise EngineError(
+                _("EMA işçisi {seconds:.0f} sn içinde yanıt vermedi; kapatıldı.").format(
+                    seconds=timeout
+                )
+            ) from None
 
         if not line:
             await process.wait()
@@ -306,9 +337,22 @@ def _setup_message(message: dict[str, Any], python: Path) -> str:
     error = message.get("error", "")
     install = INSTALL_COMMAND.format(python=python)
     if code == "missing_package":
+        # Gösterilen yorumlayıcı sistem Python'u olabilir; torch'u oraya değil
+        # ayrı bir ortama kurmayı öneririz.
         return _(
-            "EMA ortamında ({python}) gerekli paketler yok: {error}\nKurmak için:\n  {install}"
-        ).format(python=python, error=error, install=install)
+            "EMA ortamında ({python}) gerekli paketler yok: {error}\n"
+            "Ayrı bir ortam açıp paketleri oraya kur:\n"
+            "  uv venv {env}\n"
+            "  {install}\n"
+            "sonra yorumlayıcının yolunu config'e yaz:\n"
+            '  ema_python = "{example}"'
+        ).format(
+            python=python,
+            error=error,
+            env=ENV_DIR_EXAMPLE,
+            install=INSTALL_COMMAND.format(python=ENV_DIR_EXAMPLE),
+            example=_python_example(),
+        )
     if code == "wrong_version":
         return _(
             "ema-lightning {installed} kurulu; güvenli yükleme için tam olarak "

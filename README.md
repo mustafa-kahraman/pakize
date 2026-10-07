@@ -897,7 +897,7 @@ yorumlayıcısını alt süreç olarak çağırır. Üç platformda da aynı iki
 
 ```bash
 uv venv ~/.local/share/pakize-ema
-uv pip install --python ~/.local/share/pakize-ema ema-lightning==1.0.1 torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+uv pip install --python ~/.local/share/pakize-ema ema-lightning==1.0.1 torch --index https://download.pytorch.org/whl/cpu
 ```
 
 Sonra config'e yorumlayıcının yolunu yaz:
@@ -916,7 +916,8 @@ Bedeli:
   Bir seslendirme boyunca tek bir işçi süreç çalışır, parçalar ona sırayla
   gider, iş bitince kapanır — başarıda, hatada ve Ctrl+C'de. Arkada sürekli
   duran bir şey yoktur.
-- Kurulum yaklaşık **430 MB** (351 MB'ı torch'un CPU sürümü).
+- Kurulum yaklaşık **400 MB** (çoğu torch'un CPU sürümü; `--index` bayrağı
+  PyPI'daki birkaç GB'lık CUDA sürümü yerine onu seçtirir).
 - İlk kullanımda model dosyaları indirilir (yaklaşık 34 MB); sonra Hugging Face
   önbelleğinden gelir, ağ gerekmez. Kurulum eksikse ya da model yüklenemezse
   Pakize yedek motora geçer ve sebebini söyler.

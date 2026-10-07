@@ -410,9 +410,20 @@ _EN: dict[str, str] = {
         "the EMA worker exited while starting (exit code {code}).",
     "EMA işçisi seslendirme sırasında kapandı (çıkış kodu {code}).":
         "the EMA worker exited during synthesis (exit code {code}).",
-    "EMA ortamında ({python}) gerekli paketler yok: {error}\nKurmak için:\n  {install}":
+    "EMA ortamında ({python}) gerekli paketler yok: {error}\n"
+    "Ayrı bir ortam açıp paketleri oraya kur:\n"
+    "  uv venv {env}\n"
+    "  {install}\n"
+    "sonra yorumlayıcının yolunu config'e yaz:\n"
+    '  ema_python = "{example}"':
         "the EMA environment ({python}) lacks the required packages: {error}\n"
-        "To install them:\n  {install}",
+        "Create a separate environment and install them there:\n"
+        "  uv venv {env}\n"
+        "  {install}\n"
+        "then put the interpreter's path in the config:\n"
+        '  ema_python = "{example}"',
+    "EMA işçisi {seconds:.0f} sn içinde yanıt vermedi; kapatıldı.":
+        "the EMA worker did not answer within {seconds:.0f} s; it was shut down.",
     "ema-lightning {installed} kurulu; güvenli yükleme için tam olarak "
     "{required} gerekli. Kurmak için:\n  {install}":
         "ema-lightning {installed} is installed; safe loading needs exactly "
