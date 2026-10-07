@@ -36,6 +36,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
+import math
 import os
 import struct
 import sys
@@ -65,6 +66,17 @@ TARGET_PEAK = 0.95
 
 SEED = 0
 """Sabit tohum: aynı metin her seferinde aynı sesi versin."""
+
+FADE_OUT_SECONDS = 0.015
+TAIL_SILENCE_SECONDS = 0.25
+"""Parça sonu: kısa bir sönüm, ardından sessizlik.
+
+EMA parçayı son kelimenin hemen ardından, düzey hâlâ sıfır değilken bitiriyor
+(ölçüm: son 50 ms'de 0.0005–0.0075); akıcı modda her parça ayrı bir ffplay ile
+çalındığı için kapanışta cızırtı duyuluyor. 15 ms'lik kosinüs sönümü sesi
+sıfıra indirir, 250 ms sessizlik ise edge'in doğal parça sonu boşluğuna yakın
+bir nefes payı bırakır.
+"""
 
 SPEED_MIN = 0.25
 SPEED_MAX = 4.0
@@ -187,6 +199,29 @@ def normalize(samples: Sequence[float], volume: float) -> list[float]:
     return [min(1.0, max(-1.0, sample * gain)) for sample in samples]
 
 
+def fade_out_gains(length: int, sample_rate: int = SAMPLE_RATE) -> list[float]:
+    """Parçanın son örnekleri için sönüm çarpanları (kosinüs, 1'den tam 0'a).
+
+    Parça sönüm süresinden kısaysa çarpan sayısı parça uzunluğuna iner; boş
+    parçada liste boştur. Son örnek her zaman 0 ile çarpılır.
+    """
+    count = min(int(round(FADE_OUT_SECONDS * sample_rate)), length)
+    return [0.5 * (1.0 + math.cos(math.pi * (i + 1) / count)) for i in range(count)]
+
+
+def tail_silence_count(sample_rate: int = SAMPLE_RATE) -> int:
+    """Parça sonuna eklenecek sıfır örnek sayısı."""
+    return int(round(TAIL_SILENCE_SECONDS * sample_rate))
+
+
+def shape_tail(samples: Sequence[float], sample_rate: int = SAMPLE_RATE) -> list[float]:
+    """Saf Python: sönümü uygular, sessizliği ekler. Normalizasyondan sonra çağrılır."""
+    gains = fade_out_gains(len(samples), sample_rate)
+    head = list(samples[: len(samples) - len(gains)])
+    tail = [sample * gain for sample, gain in zip(samples[len(samples) - len(gains) :], gains)]
+    return head + tail + [0.0] * tail_silence_count(sample_rate)
+
+
 def to_pcm16(samples: Iterable[float]) -> bytes:
     """[-1, 1] aralığındaki örnekleri 16 bit işaretli PCM'e çevirir."""
     values = [int(round(min(1.0, max(-1.0, sample)) * 32767)) for sample in samples]
@@ -262,23 +297,35 @@ def prepare_model():
 # --- sentez ------------------------------------------------------------------
 
 
-def render_pcm(audio: Any, volume: float) -> bytes:
-    """Modelin ürettiği float sesi normalize edip 16 bit PCM'e çevirir.
+def render_pcm(audio: Any, volume: float, sample_rate: int = SAMPLE_RATE) -> bytes:
+    """Modelin ürettiği float sesi normalize edip sonunu biçimler, 16 bit PCM'e çevirir.
 
     numpy varsa (gerçek işçide her zaman var) dizi işlemleriyle; yoksa saf
-    Python ile. İki yol da `gain_for` üzerinden aynı kuralı uygular.
+    Python ile. İki yol da kazancı `gain_for`, sönümü `fade_out_gains`,
+    sessizliği `tail_silence_count` üzerinden alır: kural tek yerde durur,
+    yollar yalnızca uygular.
     """
     if hasattr(audio, "detach"):  # torch tensörü
         audio = audio.detach().cpu().numpy()
     try:
         import numpy as np
     except ImportError:
-        return to_pcm16(normalize(list(audio), volume))
+        return to_pcm16(shape_tail(normalize(list(audio), volume), sample_rate))
 
     array = np.asarray(audio, dtype=np.float32).reshape(-1)
     peak = float(np.abs(array).max()) if array.size else 0.0
     scaled = np.clip(array * gain_for(peak, volume), -1.0, 1.0)
-    return (scaled * 32767).round().astype("<i2").tobytes()
+
+    gains = fade_out_gains(int(scaled.size), sample_rate)
+    split = int(scaled.size) - len(gains)
+    shaped = np.concatenate(
+        [
+            scaled[:split],
+            scaled[split:] * np.asarray(gains, dtype=np.float32),
+            np.zeros(tail_silence_count(sample_rate), dtype=np.float32),
+        ]
+    )
+    return (shaped * 32767).round().astype("<i2").tobytes()
 
 
 def synthesize(tts: Any, request: dict[str, Any]) -> None:
@@ -286,8 +333,9 @@ def synthesize(tts: Any, request: dict[str, Any]) -> None:
     speed = speed_from_rate(float(request.get("speed", 1.0)))
     volume = float(request.get("volume", 1.0))
     result = tts.say(request["text"], speed=speed, seed=SEED, sample_rate=SAMPLE_RATE)
-    pcm = render_pcm(result.audio, volume)
-    write_wav(Path(request["out"]), pcm, int(getattr(result, "sample_rate", SAMPLE_RATE)))
+    sample_rate = int(getattr(result, "sample_rate", SAMPLE_RATE))
+    pcm = render_pcm(result.audio, volume, sample_rate)
+    write_wav(Path(request["out"]), pcm, sample_rate)
 
 
 def claim_stdout() -> TextIO:

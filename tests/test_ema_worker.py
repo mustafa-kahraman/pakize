@@ -137,10 +137,18 @@ def test_pcm16_donusumu():
     assert isci.to_pcm16([0.0, 1.0, -1.0]) == b"\x00\x00\xff\x7f\x01\x80"
 
 
+def _ornekler(pcm: bytes) -> list[int]:
+    return list(struct.unpack(f"<{len(pcm) // 2}h", pcm))
+
+
 def test_render_pcm_numpysiz_calisir():
     pcm = isci.render_pcm([0.5, -0.5], 1.0)
 
-    assert pcm == isci.to_pcm16([0.95, -0.95])
+    # Son 15 ms sönümlenir: iki örneklik parçada ilki yarıya iner, ikincisi sıfırlanır;
+    # ardından 250 ms sessizlik gelir.
+    ornekler = _ornekler(pcm)
+    assert ornekler[:2] == [round(0.95 * 0.5 * 32767), 0]
+    assert len(ornekler) == 2 + isci.tail_silence_count()
 
 
 class SahteDizi:
@@ -156,7 +164,13 @@ class SahteDizi:
     def reshape(self, *_shape) -> "SahteDizi":
         return self
 
-    def __mul__(self, carpan: float) -> "SahteDizi":
+    def __getitem__(self, dilim: slice) -> "SahteDizi":
+        return SahteDizi(self.degerler[dilim])
+
+    def __mul__(self, carpan) -> "SahteDizi":
+        if isinstance(carpan, SahteDizi):
+            assert len(carpan.degerler) == len(self.degerler), "eleman sayısı uyuşmuyor"
+            return SahteDizi([d * k for d, k in zip(self.degerler, carpan.degerler)])
         return SahteDizi([d * carpan for d in self.degerler])
 
     def max(self) -> float:
@@ -182,22 +196,32 @@ def sahte_numpy(monkeypatch):
     np.asarray = lambda a, dtype=None: SahteDizi(a)
     np.abs = lambda a: SahteDizi([abs(d) for d in a.degerler])
     np.clip = lambda a, lo, hi: SahteDizi([min(hi, max(lo, d)) for d in a.degerler])
+    np.zeros = lambda n, dtype=None: SahteDizi([0.0] * n)
+    np.concatenate = lambda diziler: SahteDizi([d for dizi in diziler for d in dizi.degerler])
     monkeypatch.setitem(sys.modules, "numpy", np)
     return np
 
 
+UZUN = 3000
+"""Sönüm penceresinden (720 örnek) uzun bir test parçası; baş kısmı sönümden etkilenmez."""
+
+
 def test_numpy_yolu_volume_ile_carpar(sahte_numpy):
-    assert isci.render_pcm([0.5], 0.5) == isci.to_pcm16([0.475])
-    assert isci.render_pcm([0.5, -0.25], 1.0) == isci.to_pcm16([0.95, -0.475])
+    assert _ornekler(isci.render_pcm([0.5] * UZUN, 0.5))[0] == round(0.475 * 32767)
+    assert _ornekler(isci.render_pcm([0.5, -0.25] * UZUN, 1.0))[:2] == [
+        round(0.95 * 32767),
+        round(-0.475 * 32767),
+    ]
 
 
 def test_numpy_yolu_asan_degerleri_kirpar(sahte_numpy):
-    assert isci.render_pcm([0.5, -0.5], 2.0) == isci.to_pcm16([1.0, -1.0])
+    assert _ornekler(isci.render_pcm([0.5, -0.5] * UZUN, 2.0))[:2] == [32767, -32767]
 
 
 def test_numpy_yolu_sessiz_parcada_sifira_bolmez(sahte_numpy):
-    assert isci.render_pcm([0.0, 0.0], 1.0) == isci.to_pcm16([0.0, 0.0])
-    assert isci.render_pcm([], 1.0) == b""
+    sessiz = isci.tail_silence_count()
+    assert _ornekler(isci.render_pcm([0.0, 0.0], 1.0)) == [0] * (2 + sessiz)
+    assert _ornekler(isci.render_pcm([], 1.0)) == [0] * sessiz
 
 
 def test_torch_tensoru_numpy_dizisine_cevrilir(sahte_numpy):
@@ -211,7 +235,73 @@ def test_torch_tensoru_numpy_dizisine_cevrilir(sahte_numpy):
         def numpy(self):
             return [0.5]
 
-    assert isci.render_pcm(SahteTensor(), 1.0) == isci.to_pcm16([0.95])
+    assert _ornekler(isci.render_pcm(SahteTensor(), 1.0))[0] == 0  # tek örnek: sönüm sıfırlar
+
+
+# --- parça sonu: sönüm ve sessizlik -------------------------------------------
+
+
+def _parca_sonu_dogrula(ornekler: list[int], orijinal_uzunluk: int) -> None:
+    """Üç koruma: 250 ms tam sessizlik, tekdüze sönüm ve sıfırda biten ses, uzunluk."""
+    sessiz = isci.tail_silence_count()
+    sonum = int(round(isci.FADE_OUT_SECONDS * isci.SAMPLE_RATE))
+    assert sessiz == 12000 and sonum == 720
+
+    assert len(ornekler) == orijinal_uzunluk + sessiz
+    assert ornekler[-sessiz:] == [0] * sessiz, "son 250 ms tam sıfır olmalı"
+
+    sesli = ornekler[:orijinal_uzunluk]
+    assert sesli[-1] == 0, "son sesli örnek sıfıra inmeli"
+    sonum_bolgesi = sesli[-sonum:]
+    assert all(a >= b for a, b in zip(sonum_bolgesi, sonum_bolgesi[1:])), "sönüm tekdüze azalmalı"
+    assert sonum_bolgesi[0] > sonum_bolgesi[-1]
+    assert sesli[-sonum - 1] == round(0.95 * 32767), "sönüm penceresi dışı dokunulmaz"
+
+
+def test_saf_python_yolu_parca_sonunu_bicimler():
+    ornekler = _ornekler(isci.render_pcm([0.5] * UZUN, 1.0))
+
+    _parca_sonu_dogrula(ornekler, UZUN)
+
+
+def test_numpy_yolu_parca_sonunu_bicimler(sahte_numpy):
+    ornekler = _ornekler(isci.render_pcm([0.5] * UZUN, 1.0))
+
+    _parca_sonu_dogrula(ornekler, UZUN)
+
+
+@pytest.mark.parametrize("uzunluk", [0, 1, 10, 719])
+def test_sonumden_kisa_parca_cokmez(uzunluk):
+    ornekler = _ornekler(isci.render_pcm([0.5] * uzunluk, 1.0))
+
+    assert len(ornekler) == uzunluk + isci.tail_silence_count()
+    if uzunluk:
+        assert ornekler[uzunluk - 1] == 0
+    assert ornekler[uzunluk:] == [0] * isci.tail_silence_count()
+
+
+@pytest.mark.parametrize("uzunluk", [0, 1, 10, 719])
+def test_sonumden_kisa_parca_numpy_yolunda_cokmez(sahte_numpy, uzunluk):
+    ornekler = _ornekler(isci.render_pcm([0.5] * uzunluk, 1.0))
+
+    assert len(ornekler) == uzunluk + isci.tail_silence_count()
+
+
+def test_sonum_carpanlari_birden_sifira_iner():
+    gains = isci.fade_out_gains(UZUN)
+
+    assert len(gains) == 720
+    assert gains[0] == pytest.approx(1.0, abs=0.01)
+    assert gains[-1] == 0.0
+    assert all(a > b for a, b in zip(gains, gains[1:]))
+    assert isci.fade_out_gains(5) and len(isci.fade_out_gains(5)) == 5
+    assert isci.fade_out_gains(0) == []
+
+
+def test_sessiz_parcada_son_bicimleme_de_sessiz_kalir():
+    ornekler = _ornekler(isci.render_pcm([0.0] * UZUN, 1.0))
+
+    assert ornekler == [0] * (UZUN + isci.tail_silence_count())
 
 
 def test_wav_48khz_mono_16bit(tmp_path):
@@ -388,7 +478,10 @@ def test_istek_seslendirilir_ve_wav_yazilir(tmp_path):
     ]
     with wave.open(str(hedef), "rb") as okuyucu:
         assert okuyucu.getframerate() == 48000
-        assert okuyucu.readframes(3) == isci.to_pcm16([0.95, -0.475, 0.0])
+        assert okuyucu.getnframes() == 3 + isci.tail_silence_count()
+        # Üç örneklik parça baştan sona sönüm penceresinde: 0.95·g0, -0.475·g1, 0.
+        beklenen = isci.shape_tail([0.95, -0.475, 0.0])[:3]
+        assert okuyucu.readframes(3) == isci.to_pcm16(beklenen)
 
 
 def test_sentez_hatasi_yanit_olarak_doner_isci_yasar(tmp_path):
@@ -493,7 +586,8 @@ def test_gercek_isci_gurultuyu_protokol_akisina_karistirmaz(tmp_path):
     ):
         assert gurultu in stderr
     with wave.open(str(hedef), "rb") as okuyucu:
-        assert okuyucu.readframes(2) == isci.to_pcm16([0.95, -0.95])
+        assert okuyucu.getnframes() == 2 + isci.tail_silence_count()
+        assert okuyucu.readframes(2) == isci.to_pcm16(isci.shape_tail([0.95, -0.95])[:2])
 
 
 def test_gercek_isci_acilis_hatasini_protokolle_bildirir(tmp_path):
