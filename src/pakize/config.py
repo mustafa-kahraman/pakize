@@ -62,7 +62,7 @@ class Config:
     """Konuşma hızı çarpanı. 1.0 = normal. Ondalıklı değer serbesttir."""
 
     pitch_hz: int = 0
-    """Ses perdesi kaydırması (Hz). 0 = değişiklik yok."""
+    """Ses perdesi kaydırması (Hz). 0 = değişiklik yok. Yalnızca edge uygular."""
 
     volume: float = 1.0
     """Ses yüksekliği çarpanı. 1.0 = normal."""
@@ -283,7 +283,7 @@ _FIELD_NOTES: dict[str, str] = {
     "fallback_engine": "birincil motor çalışmazsa denenecek motor",
     "rate": "konuşma hızı çarpanı; 1.0 = normal, ara değerler serbest (1.12 olur)",
     "volume": "ses yüksekliği çarpanı",
-    "pitch_hz": "ses perdesi kaydırması (Hz)",
+    "pitch_hz": "ses perdesi kaydırması (Hz); yalnızca edge motorunda",
     "max_chunk_chars": "bir TTS isteğine sığdırılacak azami karakter",
     "output_dir": "çıktı yolu verilmediğinde seslerin biriktiği dizin",
     "stream": "ilk parça hazır olunca çalmaya başla, hepsini bekleme",

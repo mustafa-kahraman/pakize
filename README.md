@@ -791,7 +791,7 @@ sesleri görür.
 voice = "tr-TR-EmelNeural"       # tr-TR-AhmetNeural de var
 rate = 1.15                      # 1.0 = normal; ara değerler serbest (1.12 olur)
 volume = 1.0
-pitch_hz = 0
+pitch_hz = 0                     # yalnızca edge motorunda
 max_chunk_chars = 2500           # bir TTS isteğine sığdırılacak azami karakter
 output_dir = "/tmp/pakize"       # çıktı yolu verilmediğinde seslerin biriktiği yer
                                  # (Windows'ta %TEMP%\pakize olarak üretilir)
@@ -926,8 +926,10 @@ Bedeli:
 Hız aynı `rate` alanından gelir ve olduğu gibi geçer (1.15 = %15 hızlı). EMA
 0.25–4 aralığını kabul eder; dışındaki değer sessizce kırpılmaz, açık hata
 verir. EMA Piper'dan 7–8 dB kısık çıktığı için her parça tepe 0.95'e normalize
-edilir, sonra `volume` ile çarpılır. Çıktı 48 kHz mono WAV'dır; hedef `.mp3`
-ise birleştirmede dönüştürülür.
+edilir, sonra `volume` ile çarpılır; her parçanın sonuna kısa bir sönüm ve
+250 ms sessizlik eklenir. `pitch_hz` yalnızca edge motorunda çalışır; EMA ve
+Piper bu ayarı yok sayar. Çıktı 48 kHz mono WAV'dır; hedef `.mp3` ise
+birleştirmede dönüştürülür.
 
 **Güvenlik notu.** `ema-lightning` paketi modeli `torch.load(weights_only=False)`
 ile açar ve dosyaları sürüm sabitlemeden indirir; ilki pickle dosyasının

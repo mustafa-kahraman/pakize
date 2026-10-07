@@ -812,7 +812,7 @@ German voices first.
 voice = "tr-TR-EmelNeural"       # tr-TR-AhmetNeural is also available
 rate = 1.15                      # 1.0 = normal; intermediate values are fine (1.12 works)
 volume = 1.0
-pitch_hz = 0
+pitch_hz = 0                     # edge engine only
 max_chunk_chars = 2500           # max characters to fit into one TTS request
 output_dir = "/tmp/pakize"       # where audio accumulates when no output path is given
                                  # (generated as %TEMP%\pakize on Windows)
@@ -954,9 +954,10 @@ The cost:
 Speed comes from the same `rate` field and is passed through as-is (1.15 = 15%
 faster). EMA accepts the range 0.25–4; a value outside it is not silently
 clamped but rejected with a clear error. EMA is 7–8 dB quieter than Piper, so
-every chunk is normalized to a peak of 0.95 and then multiplied by `volume`.
-The output is 48 kHz mono WAV; if the target is `.mp3` it is converted during
-concatenation.
+every chunk is normalized to a peak of 0.95 and then multiplied by `volume`;
+a short fade-out and 250 ms of silence are appended to each chunk. `pitch_hz`
+works only with the edge engine; EMA and Piper ignore it. The output is 48 kHz
+mono WAV; if the target is `.mp3` it is converted during concatenation.
 
 **Security note.** The `ema-lightning` package opens the model with
 `torch.load(weights_only=False)` and downloads its files without pinning a

@@ -311,7 +311,7 @@ _EN: dict[str, str] = {
     "konuşma hızı çarpanı; 1.0 = normal, ara değerler serbest (1.12 olur)":
         "speech rate multiplier; 1.0 = normal, any value works (1.12 is fine)",
     "ses yüksekliği çarpanı": "volume multiplier",
-    "ses perdesi kaydırması (Hz)": "pitch shift (Hz)",
+    "ses perdesi kaydırması (Hz); yalnızca edge motorunda": "pitch shift (Hz); edge engine only",
     "bir TTS isteğine sığdırılacak azami karakter":
         "maximum characters per TTS request",
     "çıktı yolu verilmediğinde seslerin biriktiği dizin":
