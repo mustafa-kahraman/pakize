@@ -22,10 +22,15 @@ from pakize.engines.base import TtsEngine
 from pakize.engines.ema import EmaEngine
 
 SAHTE_ISCI = '''
-import json, os, sys, time
+import io, json, os, sys, time
 MODE = {mode!r}
 KAYIT = {kayit!r}
 BEKLEME_ISARETI = {isaret!r}
+
+# Windows'ta stderr yerel kod sayfasıyla açılır; bunu her platformda taklit
+# edip gerçek işçinin yaptığı gibi UTF-8'e alırız (ema_worker.utf8_stderr).
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="cp1252", errors="backslashreplace", line_buffering=True)
+sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 # Her başlatma kaydedilir: testler süreç sayısını ve -I bayrağını buradan okur.
 with open(KAYIT, "a", encoding="utf-8") as kayit:
@@ -270,9 +275,13 @@ def test_kurulum_komutu_cpu_torch_dizinini_tek_dizin_olarak_verir():
 
 
 def test_isci_ust_surec_olunce_kapanacak_sekilde_baslatilir(config, kurulum, tmp_path, monkeypatch):
-    """`die_with_parent` alt sürece `preexec_fn` olarak verilmeli (kill -9 güvencesi)."""
+    """`die_with_parent` alt sürece `preexec_fn` olarak verilmeli (kill -9 güvencesi).
+
+    Gerçek süreç açılmaz: Windows `preexec_fn`'i hiç kabul etmez, Linux'ta da
+    sahte bir fonksiyonu çocukta çalıştırmaya gerek yok. Kaydedici argümanları
+    alır ve başlatmayı bir OSError ile keser; motor bunu EngineUnavailable yapar.
+    """
     kayit: dict = {}
-    orijinal_exec = ema_modulu.asyncio.create_subprocess_exec
 
     def isaret() -> None:
         return None
@@ -280,20 +289,18 @@ def test_isci_ust_surec_olunce_kapanacak_sekilde_baslatilir(config, kurulum, tmp
     async def kaydeden_exec(*command, **kwargs):
         kayit["command"] = list(command)
         kayit["kwargs"] = kwargs
-        return await orijinal_exec(*command, **kwargs)
+        raise OSError("kayıt alındı, süreç açılmadı")
 
     monkeypatch.setattr(ema_modulu, "die_with_parent", lambda: isaret)
     monkeypatch.setattr(ema_modulu.asyncio, "create_subprocess_exec", kaydeden_exec)
     engine = _motor(config, kurulum)
 
-    async def senaryo():
-        await engine.synthesize("metin", tmp_path / "a.wav")
-        await engine.aclose()
+    with pytest.raises(EngineUnavailable, match="süreç açılmadı"):
+        asyncio.run(engine.synthesize("metin", tmp_path / "a.wav"))
 
-    asyncio.run(senaryo())
-
-    assert kayit["kwargs"]["preexec_fn"] is isaret
+    assert kayit["kwargs"].get("preexec_fn") is isaret
     assert kayit["command"][:2] == [sys.executable, "-I"]
+    assert kurulum.baslatmalar() == []
 
 
 def test_yanit_gecikirse_isci_kapatilir_ve_hata_verilir(config, kurulum, tmp_path, monkeypatch):

@@ -531,10 +531,14 @@ def test_kurulum_hatasi_mesaji_kodu_tasir():
 
 
 BASLATICI = '''
-import importlib.util, os, sys, types
+import importlib.util, io, os, sys, types
 spec = importlib.util.spec_from_file_location("ema_worker", {worker!r})
 isci = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(isci)
+
+# Windows'un yerel kod sayfası taklidi: stderr cp1252 ile açılmış gibi.
+# İşçi bunu claim_stdout içinde UTF-8'e almalı; almazsa Türkçe bozulur.
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="cp1252", errors="backslashreplace", line_buffering=True)
 
 
 class SahteTts:
@@ -578,6 +582,7 @@ def test_gercek_isci_gurultuyu_protokol_akisina_karistirmaz(tmp_path):
     satirlar = [json.loads(s) for s in sonuc.stdout.decode("utf-8").splitlines()]
     assert satirlar == [{"ready": True}, {"ok": True}]
     stderr = sonuc.stderr.decode("utf-8", errors="replace")
+    assert "\ufffd" not in stderr, "stderr UTF-8 değil (Windows kod sayfası kalmış)"
     for gurultu in (
         "torch gürültüsü: print üzerinden",
         "C gurultusu: 1 numarali tanitici",

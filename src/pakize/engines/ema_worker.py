@@ -343,11 +343,24 @@ def claim_stdout() -> TextIO:
 
     Hem `sys.stdout` hem de 1 numaralı dosya tanıtıcısı yönlendirilir: C
     tarafından yazan kütüphaneler Python nesnesini değil tanıtıcıyı kullanır.
+
+    stderr UTF-8'e alınır: Windows'ta akış yerel kod sayfasıyla (cp1252)
+    açılır, Pakize ise kuyruğu UTF-8 okur — Türkçe karakterler bozulurdu.
+    `-I` bayrağı PYTHONIOENCODING'i yok saydığı için kodlama burada sabitlenir.
+    Protokol kanalı zaten UTF-8 ve JSON satırları `ensure_ascii` ile ASCII'dir.
     """
     protocol = os.fdopen(os.dup(1), "w", encoding="utf-8", buffering=1)
     os.dup2(2, 1)
+    utf8_stderr()
     sys.stdout = sys.stderr
     return protocol
+
+
+def utf8_stderr() -> None:
+    """`sys.stderr`'i platformdan bağımsız UTF-8'e alır; akış yoksa dokunmaz."""
+    stream = sys.stderr
+    if stream is not None and hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 def send(channel: TextIO, message: dict[str, Any]) -> None:
