@@ -277,3 +277,97 @@ def test_motor_ag_hatasinda_yedege_dusulur(tmp_path, config, monkeypatch, sahte_
     sonuc = pipeline.synthesize("Kısa bir metin.", tmp_path / "ses.txt", config)
 
     assert sonuc.engine == "sahte"
+
+
+class KapanisKaydedenMotor(SahteMotor):
+    """`aclose` çağrısını sayar; motor kaynaklarının bırakıldığını kanıtlar."""
+
+    name = "kaydeden"
+
+    def __init__(self, config: Config) -> None:
+        super().__init__(config)
+        self.kapanis = 0
+
+    async def aclose(self) -> None:
+        self.kapanis += 1
+
+
+@pytest.fixture
+def kaydeden(monkeypatch):
+    motor_kutusu: dict[str, KapanisKaydedenMotor] = {}
+
+    def sahte_create(name: str, cfg: Config):
+        motor_kutusu[name] = KapanisKaydedenMotor(cfg)
+        return motor_kutusu[name]
+
+    monkeypatch.setattr(pipeline, "create_engine", sahte_create)
+    return motor_kutusu
+
+
+def test_is_basariyla_bitince_motor_kapatilir(tmp_path, config, kaydeden, sahte_concat):
+    config = replace(config, engine="kaydeden", max_chunk_chars=20)
+
+    pipeline.synthesize("Birinci cümle. İkinci cümle.", tmp_path / "ses.txt", config)
+
+    assert kaydeden["kaydeden"].kapanis == 1
+
+
+def test_motor_hata_verince_de_kapatilir(tmp_path, config, monkeypatch, sahte_concat):
+    class PatlayanMotor(KapanisKaydedenMotor):
+        async def synthesize(self, text: str, destination: Path) -> None:
+            raise EngineError("sentez bozuldu")
+
+    motor = PatlayanMotor(config)
+    monkeypatch.setattr(pipeline, "create_engine", lambda name, cfg: motor)
+
+    with pytest.raises(EngineError, match="sentez bozuldu"):
+        pipeline.synthesize("Kısa bir metin.", tmp_path / "ses.txt", config)
+
+    assert motor.kapanis == 1
+
+
+def test_tuketici_patlayinca_da_motor_kapatilir(tmp_path, config, kaydeden, sahte_concat):
+    config = replace(config, engine="kaydeden", max_chunk_chars=20)
+
+    async def patla(part):
+        raise RuntimeError("çalma bozuldu")
+
+    with pytest.raises(RuntimeError, match="çalma bozuldu"):
+        pipeline.synthesize(
+            "Birinci cümle. İkinci cümle.",
+            tmp_path / "ses.txt",
+            config,
+            on_part_ready=patla,
+        )
+
+    assert kaydeden["kaydeden"].kapanis == 1
+
+
+def test_iptal_edilince_de_motor_kapatilir(tmp_path, config, monkeypatch, sahte_concat):
+    """Ctrl+C boru hattını iptal ettiğinde de motor kaynaklarını bırakmalı."""
+    import asyncio
+
+    class BekleyenMotor(KapanisKaydedenMotor):
+        def __init__(self, config: Config) -> None:
+            super().__init__(config)
+            self.basladi = asyncio.Event()
+
+        async def synthesize(self, text: str, destination: Path) -> None:
+            self.basladi.set()
+            await asyncio.sleep(60)
+
+    async def senaryo():
+        motor = BekleyenMotor(config)
+        monkeypatch.setattr(pipeline, "create_engine", lambda name, cfg: motor)
+        gorev = asyncio.create_task(
+            pipeline.synthesize_async("Kısa bir metin.", tmp_path / "ses.txt", config)
+        )
+        await motor.basladi.wait()
+        gorev.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await gorev
+        return motor
+
+    motor = asyncio.run(senaryo())
+
+    assert motor.kapanis == 1

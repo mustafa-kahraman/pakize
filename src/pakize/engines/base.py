@@ -20,8 +20,12 @@ class EngineUnavailable(EngineError):
 class TtsEngine(abc.ABC):
     """Metni ses dosyasına çeviren adaptör.
 
-    Motorlar durumsuzdur: her `synthesize` çağrısı bağımsızdır. Bölme, sıralama
-    ve birleştirme boru hattının işidir; motor yalnızca tek bir parçayı seslendirir.
+    Bölme, sıralama ve birleştirme boru hattının işidir; motor yalnızca tek bir
+    parçayı seslendirir. Bir motor nesnesi tek bir seslendirme işi boyunca
+    yaşar ve `synthesize` çağrıları arasında kaynak tutabilir (EMA'nın yüklü
+    modelle bekleyen işçi süreci gibi). İş bitince boru hattı `aclose` ile bu
+    kaynakları bıraktırır; durumsuz motorlar (edge, piper) varsayılan boş
+    gövdeyi kullanır.
     """
 
     name: ClassVar[str]
@@ -40,3 +44,11 @@ class TtsEngine(abc.ABC):
     @abc.abstractmethod
     async def synthesize(self, text: str, destination: Path) -> None:
         """`text`'i seslendirip `destination` yoluna yazar."""
+
+    async def aclose(self) -> None:
+        """İş bitince motorun tuttuğu kaynakları bırakır.
+
+        Boru hattı bunu her durumda — başarı, hata, iptal — `finally` içinde
+        çağırır. Kaynak tutmayan motor için yapacak bir şey yoktur.
+        """
+        return None

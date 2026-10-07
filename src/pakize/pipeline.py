@@ -161,32 +161,37 @@ async def _render_with_engine(
     engine = create_engine(engine_name, replace(config, engine=engine_name))
     engine.ensure_available()
 
-    with tempfile.TemporaryDirectory(prefix="pakize-") as workdir:
-        root = Path(workdir)
-        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-        completed = 0
+    try:
+        with tempfile.TemporaryDirectory(prefix="pakize-") as workdir:
+            root = Path(workdir)
+            semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+            completed = 0
 
-        async def render(chunk: Chunk) -> Path:
-            nonlocal completed
-            part = root / f"{chunk.index:05d}{engine.output_suffix}"
-            async with semaphore:
-                await engine.synthesize(chunk.text, part)
-            completed += 1
-            if progress is not None:
-                progress(completed, len(plan.chunks))
-            return part
+            async def render(chunk: Chunk) -> Path:
+                nonlocal completed
+                part = root / f"{chunk.index:05d}{engine.output_suffix}"
+                async with semaphore:
+                    await engine.synthesize(chunk.text, part)
+                completed += 1
+                if progress is not None:
+                    progress(completed, len(plan.chunks))
+                return part
 
-        # Görevler burada başlar; aşağıdaki sıralı tüketim üretimi beklemez.
-        tasks = [asyncio.create_task(render(chunk)) for chunk in plan.chunks]
-        try:
-            parts = await _collect(tasks, on_part_ready)
-        except BaseException:
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            raise
+            # Görevler burada başlar; aşağıdaki sıralı tüketim üretimi beklemez.
+            tasks = [asyncio.create_task(render(chunk)) for chunk in plan.chunks]
+            try:
+                parts = await _collect(tasks, on_part_ready)
+            except BaseException:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                raise
 
-        concat(parts, destination)
+            concat(parts, destination)
+    finally:
+        # Motorun iş boyunca tuttuğu kaynaklar (EMA'nın işçi süreci gibi) her
+        # durumda bırakılır: başarıda, hatada ve iptalde. Geride süreç kalmaz.
+        await engine.aclose()
 
 
 async def _collect(
