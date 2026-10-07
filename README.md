@@ -893,10 +893,11 @@ yüklenmesini bekler ve kurulumu daha büyüktür.
 EMA torch ister; Pakize'nin kendisi ağır makine öğrenmesi bağımlılıkları
 taşımaz. Bu yüzden EMA **ayrı bir Python ortamına** kurulur ve Pakize o ortamın
 yorumlayıcısını alt süreç olarak çağırır. Üç platformda da aynı iki komut
-(Windows'ta `~` yerine açık bir yol yaz):
+(Windows'ta `~` yerine açık bir yol yaz; ema-lightning Python 3.11 ya da
+üstü ister, bu yüzden sürüm komutta sabitlenir — uv gerekirse indirir):
 
 ```bash
-uv venv ~/.local/share/pakize-ema
+uv venv --python 3.12 ~/.local/share/pakize-ema
 uv pip install --python ~/.local/share/pakize-ema ema-lightning==1.0.1 torch --index https://download.pytorch.org/whl/cpu
 ```
 

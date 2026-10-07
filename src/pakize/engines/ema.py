@@ -46,6 +46,9 @@ bir hatadan iyidir.
 STOP_GRACE_SECONDS = 5.0
 """stdin kapanınca işçinin kendi kendine çıkması için tanınan süre."""
 
+KILL_GRACE_SECONDS = 1.0
+"""Sonlandırma sinyalinden sonra, öldürmeden önce tanınan süre."""
+
 LOG_TAIL_LINES = 15
 """İşçi çökerse hata mesajına eklenecek stderr satırı sayısı."""
 
@@ -60,6 +63,14 @@ sonsuza dek beklemekten iyi.
 """
 
 ENV_DIR_EXAMPLE = "~/.local/share/pakize-ema"
+
+VENV_COMMAND = "uv venv --python 3.12 {env}"
+"""EMA ortamını açan komut; `{env}` ortam dizini.
+
+Python sürümü bilerek sabit: ema-lightning 1.0.1 Python ≥ 3.11 ister; uv
+klasördeki `.python-version`'a ya da sistemin 3.10'una düşerse kurulum
+"does not satisfy Python>=3.11" ile kalıyordu.
+"""
 
 INSTALL_COMMAND = (
     "uv pip install --python {python} ema-lightning==1.0.1 torch "
@@ -98,12 +109,12 @@ class EmaEngine(TtsEngine):
             raise EngineUnavailable(
                 _(
                     "ema motoru için ayrı bir Python ortamı gerekli. Kurmak için:\n"
-                    "  uv venv {env}\n"
+                    "  {venv}\n"
                     "  {install}\n"
                     "sonra yorumlayıcının yolunu config'e yaz:\n"
                     '  ema_python = "{example}"'
                 ).format(
-                    env=ENV_DIR_EXAMPLE,
+                    venv=VENV_COMMAND.format(env=ENV_DIR_EXAMPLE),
                     install=INSTALL_COMMAND.format(python=ENV_DIR_EXAMPLE),
                     example=example,
                 )
@@ -256,11 +267,15 @@ class _Worker:
         except (BrokenPipeError, ConnectionResetError):
             line = b""
         except asyncio.TimeoutError:
-            await self.stop()
+            # Kuyruk kapanıştan önce okunur: `stop` günlüğü kapatır. Takılmış
+            # işçi stdin'i okumadığından kibar kapanış beklenmez, sonlandırılır.
+            tail = self._log_tail()
+            await self.stop(graceful=False)
             raise EngineError(
                 _("EMA işçisi {seconds:.0f} sn içinde yanıt vermedi; kapatıldı.").format(
                     seconds=timeout
                 )
+                + tail
             ) from None
 
         if not line:
@@ -273,23 +288,25 @@ class _Worker:
             )
         return _parse(line)
 
-    async def stop(self) -> None:
+    async def stop(self, graceful: bool = True) -> None:
         """İşçiyi kapatır. Tekrar çağrılabilir.
 
-        Hazır bir işçi stdin kapanınca kendisi çıkar; henüz model yükleyen bir
-        işçi stdin'i okumadığı için doğrudan sonlandırılır (iptalde 3 saniyelik
-        yüklemenin bitmesini beklemeye değmez). İkisi de süresinde çıkmazsa
-        öldürülür.
+        Hazır bir işçi stdin kapanınca kendisi çıkar; henüz model yükleyen ya
+        da takılmış (`graceful=False`) bir işçi stdin'i okumadığı için doğrudan
+        sonlandırılır — iptalde yüklemenin bitmesini, zaman aşımında da kibar
+        kapanışı beklemeye değmez. Süresinde çıkmayan öldürülür.
         """
         process, self.process = self.process, None
         try:
             if process is not None and process.returncode is None:
-                if self.ready and process.stdin is not None:
+                if graceful and self.ready and process.stdin is not None:
                     process.stdin.close()
+                    grace = STOP_GRACE_SECONDS
                 else:
                     process.terminate()
+                    grace = KILL_GRACE_SECONDS
                 try:
-                    await asyncio.wait_for(process.wait(), STOP_GRACE_SECONDS)
+                    await asyncio.wait_for(process.wait(), grace)
                 except asyncio.TimeoutError:
                     process.kill()
                     await process.wait()
@@ -342,14 +359,14 @@ def _setup_message(message: dict[str, Any], python: Path) -> str:
         return _(
             "EMA ortamında ({python}) gerekli paketler yok: {error}\n"
             "Ayrı bir ortam açıp paketleri oraya kur:\n"
-            "  uv venv {env}\n"
+            "  {venv}\n"
             "  {install}\n"
             "sonra yorumlayıcının yolunu config'e yaz:\n"
             '  ema_python = "{example}"'
         ).format(
             python=python,
             error=error,
-            env=ENV_DIR_EXAMPLE,
+            venv=VENV_COMMAND.format(env=ENV_DIR_EXAMPLE),
             install=INSTALL_COMMAND.format(python=ENV_DIR_EXAMPLE),
             example=_python_example(),
         )

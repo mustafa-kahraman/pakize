@@ -388,12 +388,12 @@ _EN: dict[str, str] = {
     "rate pozitif olmalı": "rate must be positive",
     # --- ema motoru ---
     "ema motoru için ayrı bir Python ortamı gerekli. Kurmak için:\n"
-    "  uv venv {env}\n"
+    "  {venv}\n"
     "  {install}\n"
     "sonra yorumlayıcının yolunu config'e yaz:\n"
     '  ema_python = "{example}"':
         "the ema engine needs a separate Python environment. To set it up:\n"
-        "  uv venv {env}\n"
+        "  {venv}\n"
         "  {install}\n"
         "then put the interpreter's path in the config:\n"
         '  ema_python = "{example}"',
@@ -412,13 +412,13 @@ _EN: dict[str, str] = {
         "the EMA worker exited during synthesis (exit code {code}).",
     "EMA ortamında ({python}) gerekli paketler yok: {error}\n"
     "Ayrı bir ortam açıp paketleri oraya kur:\n"
-    "  uv venv {env}\n"
+    "  {venv}\n"
     "  {install}\n"
     "sonra yorumlayıcının yolunu config'e yaz:\n"
     '  ema_python = "{example}"':
         "the EMA environment ({python}) lacks the required packages: {error}\n"
         "Create a separate environment and install them there:\n"
-        "  uv venv {env}\n"
+        "  {venv}\n"
         "  {install}\n"
         "then put the interpreter's path in the config:\n"
         '  ema_python = "{example}"',

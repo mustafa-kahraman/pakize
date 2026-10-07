@@ -117,7 +117,7 @@ def test_python_yolu_bossa_kurulum_adimlari_soylenir():
         engine.ensure_available()
 
     assert "ema-lightning==1.0.1" in str(hata.value)
-    assert "uv venv" in str(hata.value)
+    assert f"uv venv --python 3.12 {ema_modulu.ENV_DIR_EXAMPLE}" in str(hata.value)
 
 
 def test_python_yolu_dosya_degilse_kullanilamaz(tmp_path):
@@ -248,9 +248,15 @@ def test_paket_eksikse_ayri_ortam_onerilir(config, kurulum, tmp_path):
         asyncio.run(engine.synthesize("metin", tmp_path / "a.wav"))
 
     mesaj = str(hata.value)
-    assert f"uv venv {ema_modulu.ENV_DIR_EXAMPLE}" in mesaj
+    assert f"uv venv --python 3.12 {ema_modulu.ENV_DIR_EXAMPLE}" in mesaj
     assert f"--python {ema_modulu.ENV_DIR_EXAMPLE} " in mesaj
     assert f"--python {sys.executable}" not in mesaj
+
+
+def test_ortam_komutu_python_surumunu_sabitler():
+    """ema-lightning 1.0.1 Python ≥ 3.11 ister; uv 3.10'a düşerse kurulum kalıyordu."""
+    assert "--python 3.12" in ema_modulu.VENV_COMMAND
+    assert ema_modulu.VENV_COMMAND.startswith("uv venv ")
 
 
 def test_kurulum_komutu_cpu_torch_dizinini_tek_dizin_olarak_verir():
@@ -310,6 +316,37 @@ def test_yanit_gecikirse_isci_kapatilir_ve_hata_verilir(config, kurulum, tmp_pat
 
     assert "kapatıldı" in str(hata.value)
     assert kurulum.bekleme_isareti.exists(), "işçi isteği almış olmalı"
+
+
+def test_zaman_asimi_hatasi_kibar_kapanisi_beklemez(config, kurulum, tmp_path, monkeypatch):
+    """Takılmış işçi stdin'i okumaz; hata STOP_GRACE_SECONDS kadar gecikmemeli."""
+    import time
+
+    monkeypatch.setattr(ema_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
+    monkeypatch.setattr(ema_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
+    monkeypatch.setattr(ema_modulu, "STOP_GRACE_SECONDS", 30.0)
+    engine = _motor(config, kurulum)
+
+    async def senaryo():
+        basla = time.monotonic()
+        with pytest.raises(EngineError, match="yanıt vermedi"):
+            await engine.synthesize("BEKLE", tmp_path / "a.wav")
+        return time.monotonic() - basla
+
+    gecen = asyncio.run(senaryo())
+
+    assert gecen < 5.0, f"hata {gecen:.1f} sn gecikti; kibar kapanış beklenmiş"
+
+
+def test_zaman_asimi_mesajina_stderr_kuyrugu_eklenir(config, kurulum, tmp_path, monkeypatch):
+    monkeypatch.setattr(ema_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
+    monkeypatch.setattr(ema_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
+    engine = _motor(config, kurulum)
+
+    with pytest.raises(EngineError, match="yanıt vermedi") as hata:
+        asyncio.run(engine.synthesize("BEKLE", tmp_path / "a.wav"))
+
+    assert "torch gürültüsü: uyarı falan" in str(hata.value)
 
 
 def test_yanit_zaman_asimi_isci_surecini_oldurur(config, kurulum, tmp_path, monkeypatch):

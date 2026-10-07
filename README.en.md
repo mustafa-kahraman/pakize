@@ -920,10 +920,11 @@ EMA needs torch, and Pakize itself carries no heavy machine-learning
 dependencies. So EMA is installed into **a separate Python environment**, and
 Pakize runs that environment's interpreter as a subprocess. The same two
 commands on all three platforms (on Windows, write an explicit path instead of
-`~`):
+`~`; ema-lightning needs Python 3.11 or newer, so the version is pinned in the
+command — uv downloads it if needed):
 
 ```bash
-uv venv ~/.local/share/pakize-ema
+uv venv --python 3.12 ~/.local/share/pakize-ema
 uv pip install --python ~/.local/share/pakize-ema ema-lightning==1.0.1 torch --index https://download.pytorch.org/whl/cpu
 ```
 
