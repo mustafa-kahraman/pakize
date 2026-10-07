@@ -53,7 +53,7 @@ class Config:
 
     voice: str = "tr-TR-EmelNeural"
     engine: str = "edge"
-    """Birincil motor: "edge" veya "piper"."""
+    """Birincil motor: "edge", "piper" veya "ema"."""
 
     fallback_engine: str | None = "piper"
     """Birincil motor başarısız olursa denenecek motor; None ise yedek yok."""
@@ -97,6 +97,13 @@ class Config:
 
     piper_binary: Path | None = None
     """Piper çalıştırılabilirinin yolu; None ise PATH üzerinden aranır."""
+
+    ema_python: Path | None = None
+    """EMA motorunun çalıştığı ayrı Python ortamının yorumlayıcısı.
+
+    torch Pakize'nin ortamına girmez; EMA kullanıcının ayrıca kurduğu bir sanal
+    ortamda, alt süreç olarak çalışır. None ise ema motoru kullanılamaz.
+    """
 
     asr_engine: str = "qwen"
     """Konuşmayı metne çeviren motor."""
@@ -235,6 +242,7 @@ _SCALAR_FIELDS: dict[str, type] = {
 _PATH_FIELDS = (
     "piper_model",
     "piper_binary",
+    "ema_python",
     "output_dir",
     "asr_model",
     "asr_mmproj",
@@ -285,6 +293,7 @@ _FIELD_NOTES: dict[str, str] = {
     "translate_from": "kaynak dil; auto ise servis kendisi tespit eder",
     "piper_model": "Piper ses modelinin (.onnx) yolu",
     "piper_binary": "piper çalıştırılabiliri; boşsa PATH'te aranır",
+    "ema_python": "EMA motorunun ayrı Python ortamındaki yorumlayıcısı; boşsa ema kullanılamaz",
     "asr_engine": "konuşmayı metne çeviren motor",
     "asr_server_url": "dışarıda çalışan deşifre sunucusu; boşsa asr_model ile Pakize başlatır",
     "asr_model": "deşifre modeli (.gguf); sunucu her iş için açılıp kapanır",
@@ -382,6 +391,7 @@ _EXAMPLE_VALUES: dict[str, object] = {
     "translate_to": "tr",
     "piper_model": "~/.local/share/piper/tr_TR-dfki-medium.onnx",
     "piper_binary": "~/.local/bin/piper",
+    "ema_python": "~/.local/share/pakize-ema/bin/python",
     "asr_server_url": "http://127.0.0.1:8099",
     "asr_model": "~/.local/share/pakize/asr/Qwen3-ASR-1.7B-Q8_0.gguf",
     "asr_mmproj": "~/.local/share/pakize/asr/mmproj-Qwen3-ASR-1.7B-Q8_0.gguf",

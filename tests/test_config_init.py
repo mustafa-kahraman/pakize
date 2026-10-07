@@ -39,6 +39,7 @@ def test_tanimsiz_ayarlar_yorum_olarak_yazilir():
     # örnek değerleriyle yorum satırı olarak dururlar.
     assert "# piper_model =" in icerik
     assert "# piper_binary =" in icerik
+    assert "# ema_python =" in icerik
 
 
 def test_tanimli_ayarlar_yorumlanmadan_yazilir():

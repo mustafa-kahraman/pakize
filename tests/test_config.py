@@ -180,6 +180,17 @@ def test_set_yol_ayarini_dizgi_olarak_yazar(tmp_path):
     assert load_config(path).piper_model == Path.home() / "modeller" / "tr.onnx"
 
 
+def test_ema_python_yol_olarak_okunur(tmp_path):
+    path = tmp_path / "config.toml"
+
+    set_config_value("ema_python", "~/.local/share/pakize-ema/bin/python", path)
+
+    assert load_config(path).ema_python == (
+        Path.home() / ".local" / "share" / "pakize-ema" / "bin" / "python"
+    )
+    assert load_config(path).engine == "edge", "varsayılan motor değişmemeli"
+
+
 def test_asr_baglami_serbest_metin_olarak_okunur(tmp_path):
     path = tmp_path / "config.toml"
     path.write_text(
