@@ -102,6 +102,13 @@ def test_metin_stdinden_verilir(config, calistirilan, tmp_path):
     assert calistirilan.kayit["stdin"] == "Merhaba dünya.".encode("utf-8")
 
 
+def test_kesme_isareti_pipera_oldugu_gibi_gider(config, calistirilan, tmp_path):
+    """Kesme temizliği yalnızca EMA yolunda; Piper metni değişmeden alır."""
+    asyncio.run(PiperEngine(config).synthesize("EMA'nın %20'si.", tmp_path / "ses.wav"))
+
+    assert calistirilan.kayit["stdin"] == "EMA'nın %20'si.".encode("utf-8")
+
+
 def test_model_ve_cikti_komuta_gecer(config, calistirilan, tmp_path):
     hedef = tmp_path / "ses.wav"
 

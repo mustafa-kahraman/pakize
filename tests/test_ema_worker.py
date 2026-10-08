@@ -47,6 +47,27 @@ def test_kurulu_surum_paket_yoksa_none():
     assert isci.installed_version("boyle-bir-paket-yok-pakize") is None
 
 
+# --- metin hazırlığı: kesme işaretleri ---------------------------------------
+
+
+@pytest.mark.parametrize("kesme", list("'\u2019\u2018\u02bc\u00b4`"))
+def test_her_kesme_varyanti_bosluk_olur(kesme):
+    assert isci.prepare_text(f"EMA{kesme}nın") == "EMA nın"
+
+
+def test_kesmeler_ornek_cumlelerde_cikar():
+    assert isci.prepare_text("README'ye bak, %20'si 1990'lı.") == "README ye bak, %20 si 1990 lı."
+    assert isci.prepare_text("2026'da") == "2026 da"  # bilinen bedel: ek ayrılır
+
+
+def test_art_arda_bosluklar_teke_iner():
+    assert isci.prepare_text("a ' b '' c") == "a b c"
+
+
+def test_kesmesiz_metin_degismez():
+    assert isci.prepare_text("Merhaba dünya.\nİkinci satır.") == "Merhaba dünya.\nİkinci satır."
+
+
 # --- sha256 ------------------------------------------------------------------
 
 

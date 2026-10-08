@@ -38,6 +38,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import struct
 import sys
 import wave
@@ -106,6 +107,26 @@ class SetupError(Exception):
 
 
 # --- saf mantık: torch'suz test edilir ---------------------------------------
+
+APOSTROPHES = "'\u2019\u2018\u02bc\u00b4`"
+"""ASCII kesme ve `ema_lightning/frontend.py`'nin `TYPOGRAPHY` tablosunda ona çevrilen varyantlar: ’ ‘ ʼ ´ `."""
+
+_APOSTROPHE_RUN = re.compile(f"[{re.escape(APOSTROPHES)}]")
+_SPACE_RUN = re.compile(r"[ \t]{2,}")
+
+
+def prepare_text(text: str) -> str:
+    """EMA'ya gidecek metinden kesme işaretlerini çıkarır.
+
+    EMA'nın metin düzenleyicisi (normalizer-tr, `POLICY = "fallback"`) harf harf
+    okuduğu ifadelerde kesmeyi sesli okuyor: `EMA'nın` → "e me a kesme ne ı ne",
+    `%20'si` → "yüzde yirmi kesme si". Her kesme boşlukla değiştirilir, art arda
+    gelen boşluklar teke iner. Bilinen bedel: `2026'da` gibi sayılarda ek ayrı
+    okunur ("iki bin yirmi altı da"). Mustafa dinleyerek karar verdi: seçici bir
+    yöntem değil, düz değiştirme. Yalnızca EMA yolunda uygulanır; edge ve Piper
+    metni olduğu gibi alır.
+    """
+    return _SPACE_RUN.sub(" ", _APOSTROPHE_RUN.sub(" ", text))
 
 
 def check_version(installed: str | None) -> None:

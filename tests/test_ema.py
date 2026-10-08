@@ -195,6 +195,22 @@ def test_istek_hiz_ses_ve_hedefi_tasir(config, kurulum, tmp_path):
     assert istek == {"text": "Merhaba dünya.", "out": str(hedef), "speed": 1.15, "volume": 0.8}
 
 
+def test_isciye_giden_istekte_kesme_isareti_yok(config, kurulum, tmp_path):
+    """EMA'nın düzenleyicisi kesmeyi sesli okuyor; motor onu göndermeden temizler."""
+    engine = _motor(config, kurulum)
+    hedef = tmp_path / "a.wav"
+
+    async def senaryo():
+        await engine.synthesize("EMA’nın README'ye %20'si.", hedef)
+        await engine.aclose()
+
+    asyncio.run(senaryo())
+
+    istek = json.loads(hedef.read_text(encoding="utf-8"))
+    assert istek["text"] == "EMA nın README ye %20 si."
+    assert not any(k in istek["text"] for k in "'’‘ʼ´`")
+
+
 def test_hic_baslamamis_motoru_kapatmak_sorunsuz(config, kurulum):
     asyncio.run(_motor(config, kurulum).aclose())
 

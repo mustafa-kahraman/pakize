@@ -928,8 +928,11 @@ Hız aynı `rate` alanından gelir ve olduğu gibi geçer (1.15 = %15 hızlı). 
 verir. EMA Piper'dan 7–8 dB kısık çıktığı için her parça tepe 0.95'e normalize
 edilir, sonra `volume` ile çarpılır; her parçanın sonuna kısa bir sönüm ve
 0,85 sn sessizlik eklenir (edge'in kuyruğu kadar — akıcı modda her parçayı ayrı
-bir ffplay çaldığı için daha kısa kuyrukta aygıt kapanırken cızırtı duyuluyordu). `pitch_hz` yalnızca edge motorunda çalışır; EMA ve
-Piper bu ayarı yok sayar. Çıktı 48 kHz mono WAV'dır; hedef `.mp3` ise
+bir ffplay çaldığı için daha kısa kuyrukta aygıt kapanırken cızırtı duyuluyordu).
+EMA'ya giden metinde kesme işaretleri boşlukla değiştirilir: modelin metin
+düzenleyicisi `EMA'nın` gibi harf harf okunan ifadelerde kesmeyi "kesme" diye
+okuyor; bedeli `2026'da` gibi sayılarda ekin ayrı okunması. `pitch_hz` yalnızca
+edge motorunda çalışır; EMA ve Piper bu ayarı yok sayar. Çıktı 48 kHz mono WAV'dır; hedef `.mp3` ise
 birleştirmede dönüştürülür.
 
 **Güvenlik notu.** `ema-lightning` paketi modeli `torch.load(weights_only=False)`

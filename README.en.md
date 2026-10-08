@@ -957,8 +957,11 @@ clamped but rejected with a clear error. EMA is 7–8 dB quieter than Piper, so
 every chunk is normalized to a peak of 0.95 and then multiplied by `volume`;
 a short fade-out and 0.85 s of silence are appended to each chunk (as long
 as edge's own tail — in streaming mode each chunk is played by its own ffplay,
-and a shorter tail produced a click when the audio device closed). `pitch_hz`
-works only with the edge engine; EMA and Piper ignore it. The output is 48 kHz
+and a shorter tail produced a click when the audio device closed). Apostrophes
+in text sent to EMA are replaced with spaces: the model's text normalizer reads
+the apostrophe aloud in spelled-out expressions such as `EMA'nın`; the cost is
+that in numbers like `2026'da` the suffix is read separately. `pitch_hz` works
+only with the edge engine; EMA and Piper ignore it. The output is 48 kHz
 mono WAV; if the target is `.mp3` it is converted during concatenation.
 
 **Security note.** The `ema-lightning` package opens the model with

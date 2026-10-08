@@ -127,7 +127,7 @@ class EmaEngine(TtsEngine):
     async def synthesize(self, text: str, destination: Path) -> None:
         speed = self._speed()
         request = {
-            "text": text,
+            "text": ema_worker.prepare_text(text),
             "out": str(destination),
             "speed": speed,
             "volume": self.config.volume,

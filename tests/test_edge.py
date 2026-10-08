@@ -50,6 +50,13 @@ async def test_ayarlar_edge_tts_bicimine_cevrilir(engine, communicate, tmp_path)
     assert communicate.kayit["pitch"] == "+0Hz"
 
 
+async def test_kesme_isareti_edgee_oldugu_gibi_gider(engine, communicate, tmp_path):
+    """Kesme temizliği yalnızca EMA yolunda; edge metni değişmeden alır."""
+    await engine.synthesize("EMA'nın %20'si.", tmp_path / "ses.mp3")
+
+    assert communicate.kayit["text"] == "EMA'nın %20'si."
+
+
 async def test_kurucu_hatasi_da_sarilir(engine, communicate, tmp_path):
     """Geçersiz ses adında edge-tts kurucuda patlar.
 
