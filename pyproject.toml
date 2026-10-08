@@ -1,6 +1,6 @@
 [project]
 name = "pakize"
-version = "0.5.1"
+version = "0.5.2"
 description = "Metni sese, sesi metne çeviren yerel komut satırı aracı; kod bloklarını okumaz"
 readme = "README.en.md"
 authors = [
