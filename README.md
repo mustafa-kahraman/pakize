@@ -526,6 +526,23 @@ pakize fix --remove Yuvı      # satırı sil
 Ekli biçimler ayrı satır ister: `rümut` için yazılan düzeltme `rümutu`yu
 yakalamaz, ona `pakize fix rümutu remote'u` gerekir.
 
+### Okunuş sözlüğü
+
+Seslendirmede bir kelimenin nasıl okunacağını `[tts_replacements]` tablosuyla
+sen belirlersin; motordan bağımsızdır (edge, piper, ema, antalia-mini).
+Yalnız bütün kelime eşleşir ve büyük-küçük harf ayrı sayılır: `Python`
+değişir, `Pythonic` olduğu gibi kalır. Kesmeden sonraki ek korunur:
+`KVKK'nın` → `ka ve ka ka'nın`.
+
+```toml
+[tts_replacements]
+"Python" = "paytın"
+"KVKK" = "ka ve ka ka"
+```
+
+Politikanın atladığı içerik (linkler gibi) tablodan etkilenmez; `--dry-run`
+çıktısı değiştirilmiş metni gösterir.
+
 ### Bilinmesi gerekenler
 
 Deşifre gerçek zamandan yavaştır ve uzun kayıtta süre orantıdan hızlı büyür;

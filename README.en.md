@@ -542,6 +542,22 @@ pakize fix --remove Yuvı      # delete the line
 Suffixed forms need their own lines: the correction for `rümut` does not
 catch `rümutu`; that one needs `pakize fix rümutu remote'u`.
 
+### Pronunciation dictionary
+
+The `[tts_replacements]` table lets you decide how a word is spoken; it is
+engine-independent (edge, piper, ema, antalia-mini). Only whole words match
+and case matters: `Python` changes, `Pythonic` stays as it is. The suffix
+after an apostrophe is kept: `KVKK'nın` → `ka ve ka ka'nın`.
+
+```toml
+[tts_replacements]
+"Python" = "paytın"
+"KVKK" = "ka ve ka ka"
+```
+
+Content the policy skips (links, for example) is not affected by the table;
+the `--dry-run` output shows the replaced text.
+
 ### Things worth knowing
 
 Transcription is slower than real time, and on long recordings the time grows
