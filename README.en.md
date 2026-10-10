@@ -18,7 +18,7 @@ tables, links and formatting marks according to a policy you control.
 - **Sources** — file, clipboard, stdin, or a Claude Code session transcript
 - **Books** — narrates EPUB/PDF/MOBI chapter by chapter, resumes if interrupted
 - **Translation** — translates to a target language before speaking
-- **Engines** — edge-tts (online, high quality), falls back to Piper when offline; EMA or antalia for fully local Turkish
+- **Engines** — edge-tts (online, high quality), falls back to Piper when offline; EMA or antalia-mini for fully local Turkish
 - **Control** — read, pause and stop from a keyboard shortcut
 - **Dictation** — speak, press a key, the text is on your clipboard; local model, no network
 - **Platforms** — Linux, macOS and Windows
@@ -172,7 +172,7 @@ corresponding feature:
 | clipboard tool | `--clipboard` | `sudo apt install xclip` | ships with the OS (`pbpaste`) | ships with the OS (PowerShell) |
 | `piper` | offline fallback engine | `uv tool install piper-tts` | same | same |
 | EMA environment | offline Turkish engine `ema` | see [EMA](#offline-turkish-engine-ema-lightning) | same | same |
-| antalia environment | offline Turkish engine `antalia` | see [antalia](#offline-turkish-engine-antalia-mini) | same | same |
+| antalia-mini environment | offline Turkish engine `antalia-mini` | see [antalia-mini](#offline-turkish-engine-antalia-mini) | same | same |
 
 When Pakize runs into a missing tool it prints the install command **for the
 platform you are on**; you can run the command from the error message as-is.
@@ -1000,20 +1000,20 @@ Installation is three commands (on Windows, write an explicit path instead of
 straight from Hugging Face:
 
 ```bash
-uv venv --python 3.12 ~/.local/share/pakize-antalia
-uv pip install --python ~/.local/share/pakize-antalia torch --index https://download.pytorch.org/whl/cpu
-uv pip install --python ~/.local/share/pakize-antalia "antalia-mini @ https://huggingface.co/cloud0day3/antalia-mini/resolve/1e8166a7436f3e11f7f03b339258ec30f366db60/antalia_mini-1.0.0-py3-none-any.whl"
+uv venv --python 3.12 ~/.local/share/pakize-antalia-mini
+uv pip install --python ~/.local/share/pakize-antalia-mini torch --index https://download.pytorch.org/whl/cpu
+uv pip install --python ~/.local/share/pakize-antalia-mini "antalia-mini @ https://huggingface.co/cloud0day3/antalia-mini/resolve/1e8166a7436f3e11f7f03b339258ec30f366db60/antalia_mini-1.0.0-py3-none-any.whl"
 ```
 
 Then put the interpreter's path into the config:
 
 ```toml
-engine = "antalia"
-antalia_python = "~/.local/share/pakize-antalia/bin/python"   # Windows: ~/.local/share/pakize-antalia/Scripts/python.exe
+engine = "antalia-mini"
+antalia_mini_python = "~/.local/share/pakize-antalia-mini/bin/python"   # Windows: ~/.local/share/pakize-antalia-mini/Scripts/python.exe
 ```
 
-To use it only as the fallback, set `fallback_engine = "antalia"`; for a single
-run, pass `--engine antalia`. The defaults do not change: `edge` primary,
+To use it only as the fallback, set `fallback_engine = "antalia-mini"`; for a single
+run, pass `--engine antalia-mini`. The defaults do not change: `edge` primary,
 `piper` fallback; EMA stays as it is.
 
 Speed comes from the same `rate` field: 1.0 uses the model's own default
@@ -1021,7 +1021,7 @@ speed, any other value multiplies that default (1.2 = 20% faster). The output
 is shaped like EMA's — normalized to a peak of 0.95 and multiplied by `volume`,
 with a short fade-out and 0.85 s of silence appended to each chunk — and
 written as 48 kHz mono WAV; if the target is `.mp3` it is converted during
-concatenation. Unlike EMA, apostrophes are **kept**: antalia resolves
+concatenation. Unlike EMA, apostrophes are **kept**: antalia-mini resolves
 expressions such as `EMA'nın` itself. `pitch_hz` has no effect here either. On
 first use the model files are downloaded (about 30 MB); after that it is
 offline.

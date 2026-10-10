@@ -24,9 +24,9 @@ from pakize.engines.antalia import AntaliaEngine
 from pakize.engines.base import TtsEngine
 
 KURULUM_KOMUTLARI = (
-    "uv venv --python 3.12 ~/.local/share/pakize-antalia",
-    "uv pip install --python ~/.local/share/pakize-antalia torch --index https://download.pytorch.org/whl/cpu",
-    'uv pip install --python ~/.local/share/pakize-antalia "antalia-mini @ '
+    "uv venv --python 3.12 ~/.local/share/pakize-antalia-mini",
+    "uv pip install --python ~/.local/share/pakize-antalia-mini torch --index https://download.pytorch.org/whl/cpu",
+    'uv pip install --python ~/.local/share/pakize-antalia-mini "antalia-mini @ '
     "https://huggingface.co/cloud0day3/antalia-mini/resolve/"
     '1e8166a7436f3e11f7f03b339258ec30f366db60/antalia_mini-1.0.0-py3-none-any.whl"',
 )
@@ -89,7 +89,7 @@ def kurulum(tmp_path) -> SahteKurulum:
 @pytest.fixture
 def config() -> Config:
     return replace(
-        Config(), engine="antalia", fallback_engine=None, antalia_python=Path(sys.executable)
+        Config(), engine="antalia-mini", fallback_engine=None, antalia_mini_python=Path(sys.executable)
     )
 
 
@@ -112,26 +112,26 @@ def _seslendir(engine: AntaliaEngine, metin: str, hedef: Path) -> dict:
 
 
 def test_kayitli_motor_antalia(config):
-    assert isinstance(create_engine("antalia", config), AntaliaEngine)
+    assert isinstance(create_engine("antalia-mini", config), AntaliaEngine)
     assert AntaliaEngine.output_suffix == ".wav"
 
 
 def test_python_yolu_bossa_kurulum_adimlari_soylenir():
     engine = AntaliaEngine(Config())
 
-    with pytest.raises(EngineUnavailable, match="antalia_python") as hata:
+    with pytest.raises(EngineUnavailable, match="antalia_mini_python") as hata:
         engine.ensure_available()
 
     mesaj = str(hata.value)
     for komut in KURULUM_KOMUTLARI:
         assert komut in mesaj
-    assert 'antalia_python = "~/.local/share/pakize-antalia/bin/python"' in mesaj
+    assert 'antalia_mini_python = "~/.local/share/pakize-antalia-mini/bin/python"' in mesaj
 
 
 def test_python_yolu_dosya_degilse_kullanilamaz(tmp_path):
-    engine = AntaliaEngine(replace(Config(), antalia_python=tmp_path / "yok" / "python"))
+    engine = AntaliaEngine(replace(Config(), antalia_mini_python=tmp_path / "yok" / "python"))
 
-    with pytest.raises(EngineUnavailable, match="antalia_python ile gösterilen Python yok"):
+    with pytest.raises(EngineUnavailable, match="antalia_mini_python ile gösterilen Python yok"):
         engine.ensure_available()
 
 
@@ -143,14 +143,14 @@ def test_gecerli_yorumlayici_kabul_edilir_surec_acilmaz(config, kurulum):
 
 def test_config_dosyasindan_engine_ve_yol_okunur(tmp_path):
     path = tmp_path / "config.toml"
-    set_config_value("engine", "antalia", path)
-    set_config_value("antalia_python", "~/.local/share/pakize-antalia/bin/python", path)
+    set_config_value("engine", "antalia-mini", path)
+    set_config_value("antalia_mini_python", "~/.local/share/pakize-antalia-mini/bin/python", path)
 
     config = load_config(path)
 
-    assert config.engine == "antalia"
-    assert config.antalia_python == (
-        Path.home() / ".local" / "share" / "pakize-antalia" / "bin" / "python"
+    assert config.engine == "antalia-mini"
+    assert config.antalia_mini_python == (
+        Path.home() / ".local" / "share" / "pakize-antalia-mini" / "bin" / "python"
     )
 
 
@@ -169,21 +169,36 @@ def test_cli_engine_bayragi_antaliayi_secer(monkeypatch, tmp_path):
     hedef = tmp_path / "ses.mp3"
 
     sonuc = CliRunner().invoke(
-        cli.app, ["speak", "--engine", "antalia", "--no-play", "-o", str(hedef)], input="Merhaba.\n"
+        cli.app, ["speak", "--engine", "antalia-mini", "--no-play", "-o", str(hedef)], input="Merhaba.\n"
     )
 
     assert sonuc.exit_code == 0, sonuc.output
-    assert gorulen["config"].engine == "antalia"
+    assert gorulen["config"].engine == "antalia-mini"
 
 
 def test_config_set_fallback_engine_antaliayi_kabul_eder(tmp_path, monkeypatch):
     path = tmp_path / "config.toml"
     monkeypatch.setattr(cli, "config_path", lambda: path)
 
-    sonuc = CliRunner().invoke(cli.app, ["config", "set", "fallback_engine", "antalia"])
+    sonuc = CliRunner().invoke(cli.app, ["config", "set", "fallback_engine", "antalia-mini"])
 
     assert sonuc.exit_code == 0, sonuc.output
-    assert load_config(path).fallback_engine == "antalia"
+    assert load_config(path).fallback_engine == "antalia-mini"
+
+
+def test_eski_ad_antalia_bilinmeyen_motor_gibi_reddedilir(tmp_path, monkeypatch):
+    """Motorun adı antalia-mini; eski "antalia" adı takma ad olarak yaşamaz."""
+    with pytest.raises(EngineError, match="Bilinmeyen motor: 'antalia' "):
+        create_engine("antalia", Config())
+
+    path = tmp_path / "config.toml"
+    monkeypatch.setattr(cli, "config_path", lambda: path)
+
+    sonuc = CliRunner().invoke(cli.app, ["config", "set", "engine", "antalia"])
+
+    assert sonuc.exit_code == 1
+    assert "Bilinmeyen motor: 'antalia' (tanınanlar: antalia-mini, edge, ema, piper)" in sonuc.stderr
+    assert not path.exists(), "reddedilen değer config'e yazılmamalı"
 
 
 # --- istek -------------------------------------------------------------------
@@ -240,14 +255,14 @@ def test_parcalar_tek_izole_isciyle_seslendirilir(config, kurulum, tmp_path):
 
 
 def test_isci_hata_satiri_verirse_engine_error(config, kurulum, tmp_path):
-    with pytest.raises(EngineError, match="antalia seslendirme başarısız: sentez patladı"):
+    with pytest.raises(EngineError, match="antalia-mini seslendirme başarısız: sentez patladı"):
         _seslendir(_motor(config, kurulum), "PATLA", tmp_path / "a.wav")
 
 
 def test_isci_acilista_olurse_engine_unavailable_ve_stderr_kuyrugu(config, kurulum, tmp_path):
     engine = _motor(config, kurulum, mode="acilista_ol")
 
-    with pytest.raises(EngineUnavailable, match="antalia işçisi açılırken kapandı") as hata:
+    with pytest.raises(EngineUnavailable, match="antalia-mini işçisi açılırken kapandı") as hata:
         asyncio.run(engine.synthesize("metin", tmp_path / "a.wav"))
 
     assert "torch yok" in str(hata.value)
@@ -279,7 +294,7 @@ def test_paket_eksikse_ayri_ortam_onerilir(config, kurulum, tmp_path):
 def test_sha256_uyusmazsa_dosya_adi_soylenir(config, kurulum, tmp_path):
     engine = _motor(config, kurulum, mode="sha_uyusmaz")
 
-    with pytest.raises(EngineUnavailable, match="antalia model dosyası beklenen sha256") as hata:
+    with pytest.raises(EngineUnavailable, match="antalia-mini model dosyası beklenen sha256") as hata:
         asyncio.run(engine.synthesize("metin", tmp_path / "a.wav"))
 
     assert "vocoder.safetensors" in str(hata.value)
@@ -311,7 +326,7 @@ def motorlar(monkeypatch, kurulum):
     ornekler: dict[str, TtsEngine] = {}
 
     def sahte_create(name: str, cfg: Config):
-        if name == "antalia":
+        if name == "antalia-mini":
             ornekler[name] = AntaliaEngine(cfg, worker_path=kurulum.betik())
         else:
             ornekler[name] = SahteBirincil(cfg)
@@ -328,12 +343,12 @@ def motorlar(monkeypatch, kurulum):
 
 
 def test_yedek_motor_antalia_birincil_dusunce_devreye_girer(config, kurulum, motorlar, tmp_path):
-    config = replace(config, engine="sahte", fallback_engine="antalia", max_chunk_chars=20)
+    config = replace(config, engine="sahte", fallback_engine="antalia-mini", max_chunk_chars=20)
     hedef = tmp_path / "ses.wav"
 
     sonuc = pipeline.synthesize("Birinci cümle. İkinci cümle.", hedef, config)
 
-    assert sonuc.engine == "antalia"
+    assert sonuc.engine == "antalia-mini"
     assert len(sonuc.plan.chunks) == 2
     assert len(kurulum.baslatmalar()) == 1
-    assert motorlar["antalia"]._worker is None, "iş bitince işçi kapanmalı"
+    assert motorlar["antalia-mini"]._worker is None, "iş bitince işçi kapanmalı"

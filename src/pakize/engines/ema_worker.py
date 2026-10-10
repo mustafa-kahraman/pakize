@@ -28,7 +28,7 @@ reddeder.
 
 Saf mantık (sürüm denetimi, sha256, hız eşlemesi) torch'suz test edilebilsin
 diye ağır kütüphaneler yalnızca ihtiyaç duyan fonksiyonların içinde ithal
-edilir. Ses yardımcıları (normalizasyon, parça sonu, WAV) antalia işçisiyle
+edilir. Ses yardımcıları (normalizasyon, parça sonu, WAV) antalia-mini işçisiyle
 ortak `worker_audio.py`'dedir; `-I` betik dizinini yoldan çıkardığı için dizin
 ithal süresince `sys.path`'e açıkça eklenir.
 """

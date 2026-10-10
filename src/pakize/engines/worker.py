@@ -1,6 +1,6 @@
 """Ayrı bir Python ortamında çalışan işçi süreçli motorların ortak gövdesi.
 
-torch isteyen motorlar (EMA, antalia) Pakize'nin ortamında çalışmaz; kullanıcının
+torch isteyen motorlar (EMA, antalia-mini) Pakize'nin ortamında çalışmaz; kullanıcının
 ayrıca kurduğu bir ortamın yorumlayıcısı, motorun işçi betiğini `-I` ile alt
 süreç olarak çalıştırır. Burada motordan bağımsız olan her şey durur: sürecin
 açılması ve "hazır" beklenmesi, satır başına JSON istek-yanıt, zaman aşımı,
@@ -85,10 +85,10 @@ class WorkerEngine(TtsEngine):
     """
 
     label: ClassVar[str]
-    """Hata mesajlarında görünen motor adı ("EMA", "antalia")."""
+    """Hata mesajlarında görünen motor adı ("EMA", "antalia-mini")."""
 
     config_key: ClassVar[str]
-    """Yorumlayıcı yolunu tutan config anahtarı ("ema_python", "antalia_python")."""
+    """Yorumlayıcı yolunu tutan config anahtarı ("ema_python", "antalia_mini_python")."""
 
     output_suffix: ClassVar[str] = ".wav"
 

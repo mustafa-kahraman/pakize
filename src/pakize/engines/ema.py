@@ -8,7 +8,7 @@ Model torch ister ve Pakize'nin çekirdeği ağır makine öğrenmesi bağımlı
 taşımaz (bkz. `piper.py`, `asr/qwen.py`). Bu yüzden EMA, kullanıcının ayrıca
 kurduğu bir Python ortamında çalışır: `ema_python` o ortamın yorumlayıcısını
 gösterir, Pakize `ema_worker.py` betiğini onunla alt süreç olarak başlatır.
-İşçi sürecin yönetimi (`worker.py`) antalia motoruyla ortaktır; burada yalnız
+İşçi sürecin yönetimi (`worker.py`) antalia-mini motoruyla ortaktır; burada yalnız
 EMA'ya özgü olan durur: kurulum komutları, hız aralığı, kesme temizliği.
 """
 

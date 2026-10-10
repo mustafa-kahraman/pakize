@@ -337,8 +337,8 @@ _EN: dict[str, str] = {
         "piper executable; searched on PATH when empty",
     "EMA motorunun ayrı Python ortamındaki yorumlayıcısı; boşsa ema kullanılamaz":
         "Python interpreter of the EMA engine's separate environment; ema unusable when empty",
-    "antalia motorunun ayrı Python ortamındaki yorumlayıcısı; boşsa antalia kullanılamaz":
-        "Python interpreter of the antalia engine's separate environment; antalia unusable when empty",
+    "antalia-mini motorunun ayrı Python ortamındaki yorumlayıcısı; boşsa antalia-mini kullanılamaz":
+        "Python interpreter of the antalia-mini engine's separate environment; antalia-mini unusable when empty",
     "kod blokları — okunmaz, kısaca anons edilir":
         "code blocks — not read, briefly announced",
     "Markdown tabloları": "Markdown tables",
@@ -423,30 +423,30 @@ _EN: dict[str, str] = {
     "{required} gerekli. Kurmak için:\n  {install}":
         "ema-lightning {installed} is installed; safe loading needs exactly "
         "{required}. To install it:\n  {install}",
-    # --- antalia motoru ---
-    "antalia motoru için ayrı bir Python ortamı gerekli. Kurmak için:\n"
+    # --- antalia-mini motoru ---
+    "antalia-mini motoru için ayrı bir Python ortamı gerekli. Kurmak için:\n"
     "{steps}\n"
     "sonra yorumlayıcının yolunu config'e yaz:\n"
-    '  antalia_python = "{example}"':
-        "the antalia engine needs a separate Python environment. To set it up:\n"
+    '  antalia_mini_python = "{example}"':
+        "the antalia-mini engine needs a separate Python environment. To set it up:\n"
         "{steps}\n"
         "then put the interpreter's path in the config:\n"
-        '  antalia_python = "{example}"',
-    "antalia ortamında ({python}) gerekli paketler yok: {error}\n"
+        '  antalia_mini_python = "{example}"',
+    "antalia-mini ortamında ({python}) gerekli paketler yok: {error}\n"
     "Ayrı bir ortam açıp paketleri oraya kur:\n"
     "{steps}\n"
     "sonra yorumlayıcının yolunu config'e yaz:\n"
-    '  antalia_python = "{example}"':
-        "the antalia environment ({python}) lacks the required packages: {error}\n"
+    '  antalia_mini_python = "{example}"':
+        "the antalia-mini environment ({python}) lacks the required packages: {error}\n"
         "Create a separate environment and install them there:\n"
         "{steps}\n"
         "then put the interpreter's path in the config:\n"
-        '  antalia_python = "{example}"',
+        '  antalia_mini_python = "{example}"',
     "antalia-mini {installed} kurulu; tam olarak {required} gerekli. "
     "Kurmak için:\n  {install}":
         "antalia-mini {installed} is installed; exactly {required} is required. "
         "To install it:\n  {install}",
-    # --- işçi süreçli motorların ortak mesajları (EMA, antalia) ---
+    # --- işçi süreçli motorların ortak mesajları (EMA, antalia-mini) ---
     "{key} ile gösterilen Python yok: {path}":
         "the Python pointed to by {key} is missing: {path}",
     "{engine} seslendirme başarısız: {error}": "{engine} synthesis failed: {error}",

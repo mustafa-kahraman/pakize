@@ -2,7 +2,7 @@
 
 Bu dosya `pakize`'yi İTHAL ETMEZ (bkz. `ema_worker.py` baş yorumu): yalnızca
 standart kütüphane, torch, numpy ve antalia_mini kullanır. Pakize onu
-`[antalia_python, "-I", <bu dosya>]` ile başlatır. Ses yardımcıları EMA
+`[antalia_mini_python, "-I", <bu dosya>]` ile başlatır. Ses yardımcıları EMA
 işçisiyle ortak `worker_audio.py`'dedir; `-I` betik dizinini yoldan çıkardığı
 için dizin ithal süresince `sys.path`'e açıkça eklenir.
 

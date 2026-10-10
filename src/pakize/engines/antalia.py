@@ -6,7 +6,7 @@ parametrelik, tek sesli, CPU'da çalışan bir Türkçe TTS modelidir (Apache-2.
 varsayılanlar değişmez (edge birincil, piper yedek).
 
 Model torch ister; EMA gibi kullanıcının ayrıca kurduğu bir Python ortamında,
-`antalia_python` ile gösterilen yorumlayıcıyla `antalia_worker.py` alt süreç
+`antalia_mini_python` ile gösterilen yorumlayıcıyla `antalia_worker.py` alt süreç
 olarak çalışır. İşçi sürecin yönetimi `worker.py`'de ortaktır; burada yalnız
 antalia'ya özgü olan durur: kurulum komutları ve isteğin alanları.
 """
@@ -25,7 +25,7 @@ from .worker import WorkerEngine, python_example
 WORKER_PATH = Path(antalia_worker.__file__)
 """Alt süreçte çalışan betik; testler protokolü taklit eden bir sahteyle değiştirir."""
 
-ENV_DIR_EXAMPLE = "~/.local/share/pakize-antalia"
+ENV_DIR_EXAMPLE = "~/.local/share/pakize-antalia-mini"
 
 WHEEL_URL = (
     "https://huggingface.co/cloud0day3/antalia-mini/resolve/"
@@ -54,22 +54,22 @@ def install_steps(python: str) -> str:
 
 
 class AntaliaEngine(WorkerEngine):
-    name: ClassVar[str] = "antalia"
-    label: ClassVar[str] = "antalia"
-    config_key: ClassVar[str] = "antalia_python"
+    name: ClassVar[str] = "antalia-mini"
+    label: ClassVar[str] = "antalia-mini"
+    config_key: ClassVar[str] = "antalia_mini_python"
 
     def __init__(self, config: Config, worker_path: Path | None = None) -> None:
         super().__init__(config, worker_path or WORKER_PATH)
 
     def _python(self) -> Path:
-        python = self.config.antalia_python
+        python = self.config.antalia_mini_python
         if python is None:
             raise EngineUnavailable(
                 _(
-                    "antalia motoru için ayrı bir Python ortamı gerekli. Kurmak için:\n"
+                    "antalia-mini motoru için ayrı bir Python ortamı gerekli. Kurmak için:\n"
                     "{steps}\n"
                     "sonra yorumlayıcının yolunu config'e yaz:\n"
-                    '  antalia_python = "{example}"'
+                    '  antalia_mini_python = "{example}"'
                 ).format(
                     steps=install_steps(ENV_DIR_EXAMPLE),
                     example=python_example(ENV_DIR_EXAMPLE),
@@ -96,11 +96,11 @@ class AntaliaEngine(WorkerEngine):
             # Gösterilen yorumlayıcı sistem Python'u olabilir; torch'u oraya değil
             # ayrı bir ortama kurmayı öneririz.
             return _(
-                "antalia ortamında ({python}) gerekli paketler yok: {error}\n"
+                "antalia-mini ortamında ({python}) gerekli paketler yok: {error}\n"
                 "Ayrı bir ortam açıp paketleri oraya kur:\n"
                 "{steps}\n"
                 "sonra yorumlayıcının yolunu config'e yaz:\n"
-                '  antalia_python = "{example}"'
+                '  antalia_mini_python = "{example}"'
             ).format(
                 python=python,
                 error=message.get("error", ""),
