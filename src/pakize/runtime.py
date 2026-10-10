@@ -1,8 +1,15 @@
-"""Çalmakta olan seslendirmenin süreç kaydı ve denetimi.
+"""Çalmakta olan seslendirmenin süreç kaydı, okuma kuyruğu ve denetimi.
 
 `pakize stop` ve `pakize pause`, çalmayı başlatan sürece ulaşabilmek için bu
 kaydı okur. Kayıt geçici dizin altında tutulur; oturum kapanınca işletim
 sistemi temizler.
+
+Kayıt aynı zamanda bir kuyruktur: her çalacak süreç sıraya girer ve kendinden
+eski yaşayan kayıt kalmayana kadar bekler; böylece iki Pakize asla üst üste
+çalmaz. Sıra, kayda yazılan zaman damgasıyla belirlenir (eşitlikte küçük
+süreç numarası önde); dosya değişiklik zamanı dosya sistemine göre kaba
+olabildiği için kullanılmaz. Kilit yoktur: önce kaydol, sonra sıraya bak —
+Windows'ta POSIX kilitleri yok, bu yol her yerde çalışır.
 
 Kayıt yalnızca bir ipucudur: süreç kimlikleri yeniden kullanılabildiği için
 okurken sürecin gerçekten Pakize olduğu doğrulanır.
@@ -15,7 +22,11 @@ Tek kod yolu ancak bu soyutlamayla mümkün.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import psutil
@@ -23,13 +34,27 @@ import psutil
 from .platforms import temp_root
 
 STATE_NAME = "pakize-playing"
-"""Çalan seslendirmelerin kaydı; `pakize stop` ve `pause` buna bakar."""
+"""Çalan ve sırada bekleyen seslendirmelerin kaydı; `stop` ve `pause` buna bakar."""
 
 DICTATION_STATE_NAME = "pakize-dictating"
 """Süren diktelerin kaydı; ikinci `pakize dictate` çağrısı buna bakar."""
 
 PLAYER_COMM = "ffplay"
 """Çalmayı yürüten sürecin adı (Windows'ta `ffplay.exe` olarak görünür)."""
+
+QUEUE_POLL_SECONDS = 0.2
+"""Sıranın gelip gelmediğine bakma aralığı; sıradaki en çok bu kadar geç başlar."""
+
+
+@dataclass(frozen=True)
+class Entry:
+    """Kayıttaki tek bir süreç."""
+
+    pid: int
+    registered_ns: int
+    """Kayda giriş anı (`time.time_ns()`); sıra buna göre kurulur."""
+    text_hash: str | None
+    """Okunan metnin sha256'sı; metinsiz çalmalarda (kitap, tekrar, uyarı) None."""
 
 
 def state_dir(name: str = STATE_NAME) -> Path:
@@ -47,11 +72,23 @@ def state_dir(name: str = STATE_NAME) -> Path:
     return root / name
 
 
-def register(pid: int, name: str = STATE_NAME) -> None:
-    """Süreci kaydeder."""
+def register(pid: int, name: str = STATE_NAME, text: str | None = None) -> None:
+    """Süreci kaydeder ve sıranın sonuna ekler.
+
+    Metin verilirse yalnızca özeti yazılır; tekrar tespiti ona bakar, metnin
+    kendisi kayda girmez. Dosya önce geçici ada yazılıp taşınır: sırayı okuyan
+    bir süreç yarım dosyayla karşılaşmasın.
+    """
     directory = state_dir(name)
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / str(pid)).write_text(str(pid), encoding="utf-8")
+    record = {
+        "registered_ns": time.time_ns(),
+        "text_hash": _text_hash(text) if text is not None else None,
+    }
+    target = directory / str(pid)
+    partial = directory / f"{pid}.partial"
+    partial.write_text(json.dumps(record), encoding="utf-8")
+    os.replace(partial, target)
 
 
 def clear(pid: int, name: str = STATE_NAME) -> None:
@@ -59,32 +96,87 @@ def clear(pid: int, name: str = STATE_NAME) -> None:
     (state_dir(name) / str(pid)).unlink(missing_ok=True)
 
 
-def running_pids(name: str = STATE_NAME) -> list[int]:
-    """Kayıtlı ve hâlâ yaşayan Pakize süreçleri; en yeniden eskiye.
+def entries(name: str = STATE_NAME) -> list[Entry]:
+    """Kayıtlı ve hâlâ yaşayan Pakize süreçleri; sıra düzeninde, en eski önde.
 
-    Bayat kayıtlar sessizce temizlenir.
+    En öndeki çalandır, gerisi bekler. Bayat kayıtlar sessizce temizlenir.
     """
     directory = state_dir(name)
     if not directory.is_dir():
         return []
 
-    alive: list[tuple[float, int]] = []
-    for entry in directory.iterdir():
-        if not entry.name.isdigit():
+    alive: list[Entry] = []
+    for path in directory.iterdir():
+        if not path.name.isdigit():
             continue
-        pid = int(entry.name)
+        pid = int(path.name)
         if not _is_pakize(pid):
-            entry.unlink(missing_ok=True)
+            path.unlink(missing_ok=True)
             continue
-        alive.append((entry.stat().st_mtime, pid))
+        alive.append(_read_entry(pid, path))
 
-    return [pid for _, pid in sorted(alive, reverse=True)]
+    return sorted(alive, key=lambda entry: (entry.registered_ns, entry.pid))
+
+
+def running_pids(name: str = STATE_NAME) -> list[int]:
+    """Kayıtlı ve hâlâ yaşayan Pakize süreçleri; sıra düzeninde, çalan önde."""
+    return [entry.pid for entry in entries(name)]
 
 
 def running_pid() -> int | None:
-    """En son kaydedilen yaşayan süreç; yoksa None."""
+    """Sıranın başındaki, yani çalmakta olan süreç; yoksa None."""
     pids = running_pids()
     return pids[0] if pids else None
+
+
+def wait_for_turn(pid: int, name: str = STATE_NAME) -> None:
+    """Sürecin önündeki kayıtlar bitene kadar bekler.
+
+    Kendi kaydı silinmişse de döner: `pakize stop --all` süreci zaten
+    sonlandırıyordur, burada takılı kalmanın anlamı yok.
+    """
+    while True:
+        pids = running_pids(name)
+        if pid not in pids or pids[0] == pid:
+            return
+        time.sleep(QUEUE_POLL_SECONDS)
+
+
+def earlier_duplicate(pid: int, name: str = STATE_NAME) -> bool:
+    """Sırada bu süreçten önce aynı metni taşıyan bir kayıt var mı?
+
+    Önce kaydolup sonra bakmak yarışı belirli kılar: aynı anda giren iki
+    süreçten sıralamada arkada kalan tekrar sayılır, öndeki kalır. Metinsiz
+    kayıtlar hiçbir şeyle eşleşmez.
+    """
+    queue = entries(name)
+    own = next((entry for entry in queue if entry.pid == pid), None)
+    if own is None or own.text_hash is None:
+        return False
+    return any(
+        entry.text_hash == own.text_hash for entry in queue[: queue.index(own)]
+    )
+
+
+def _text_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _read_entry(pid: int, path: Path) -> Entry:
+    """Kayıt dosyasını çözer.
+
+    Önceki sürümler dosyaya yalnızca süreç numarasını yazıyordu; güncelleme
+    sırasında yaşayan böyle bir kayıt çalan sayılır ve sıranın başına alınır.
+    """
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        return Entry(
+            pid=pid,
+            registered_ns=int(record["registered_ns"]),
+            text_hash=record.get("text_hash"),
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        return Entry(pid=pid, registered_ns=0, text_hash=None)
 
 
 def pause(pid: int) -> bool:

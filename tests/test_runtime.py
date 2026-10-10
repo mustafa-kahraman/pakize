@@ -3,6 +3,8 @@
 Hermetiktir: gerçek süreç öldürülmez, `psutil` sahte süreçlerle değiştirilir.
 """
 
+import os
+
 import psutil
 import pytest
 
@@ -189,6 +191,152 @@ def test_ulasilamayan_surec_agaci_bos_liste_doner(monkeypatch):
 
     assert runtime._players(4242) == []
     assert runtime._is_pakize(4242) is False
+
+
+# --- okuma sırası -------------------------------------------------------------
+
+
+@pytest.fixture
+def zaman(monkeypatch):
+    """`time.time_ns`'i elle ilerletir; sıra zaman damgasından okunur."""
+    simdi = {"ns": 1_000}
+
+    def ayarla(ns: int):
+        simdi["ns"] = ns
+
+    monkeypatch.setattr(runtime.time, "time_ns", lambda: simdi["ns"])
+    return ayarla
+
+
+def test_sira_kayit_zamanina_gore_kurulur_dosya_zamanina_degil(
+    pakize_surecleri, zaman
+):
+    """mtime dosya sistemine göre kaba olabilir; sıra kayda yazılan damgadan okunur."""
+    pakize_surecleri(1111, 2222)
+    zaman(200)
+    runtime.register(1111)
+    zaman(100)
+    runtime.register(2222)
+    # Dosya zamanları tersini söylesin: 1111 daha eski görünsün.
+    os.utime(runtime.state_dir() / "1111", (1, 1))
+    os.utime(runtime.state_dir() / "2222", (9_000_000, 9_000_000))
+
+    assert runtime.running_pids() == [2222, 1111]
+    assert runtime.running_pid() == 2222
+
+
+def test_ayni_anda_giren_kayitlarda_kucuk_pid_onde(pakize_surecleri, zaman):
+    pakize_surecleri(1111, 2222)
+    zaman(500)
+    runtime.register(2222)
+    runtime.register(1111)
+
+    assert runtime.running_pids() == [1111, 2222]
+
+
+def test_kayit_metnin_ozetini_tasir_metni_degil(pakize_surecleri):
+    pakize_surecleri(1111, 2222)
+    runtime.register(1111, text="gizli metin")
+    runtime.register(2222)
+
+    birinci, ikinci = runtime.entries()
+    assert birinci.text_hash == runtime._text_hash("gizli metin")
+    assert ikinci.text_hash is None
+    assert "gizli metin" not in (runtime.state_dir() / "1111").read_text(encoding="utf-8")
+
+
+def test_eski_bicimdeki_kayit_calan_sayilir(pakize_surecleri, zaman):
+    """Önceki sürüm dosyaya yalnız pid yazıyordu; yaşıyorsa sıranın başındadır."""
+    pakize_surecleri(1111, 2222)
+    zaman(50)
+    runtime.register(2222)
+    (runtime.state_dir() / "1111").write_text("1111", encoding="utf-8")
+
+    assert runtime.running_pids() == [1111, 2222]
+
+
+def test_sira_gelmeden_beklenir_oncekiler_bitince_doner(pakize_surecleri, zaman, monkeypatch):
+    pakize_surecleri(1111, 2222)
+    zaman(100)
+    runtime.register(1111)
+    zaman(200)
+    runtime.register(2222)
+    uyumalar: list[float] = []
+
+    def sahte_uyku(seconds):
+        uyumalar.append(seconds)
+        if len(uyumalar) == 3:
+            runtime.clear(1111)
+
+    monkeypatch.setattr(runtime.time, "sleep", sahte_uyku)
+
+    runtime.wait_for_turn(2222)
+
+    assert uyumalar == [runtime.QUEUE_POLL_SECONDS] * 3
+    assert runtime.QUEUE_POLL_SECONDS <= 0.2
+
+
+def test_sira_bastaysa_beklenmez(pakize_surecleri, monkeypatch):
+    pakize_surecleri(1111)
+    runtime.register(1111)
+    monkeypatch.setattr(runtime.time, "sleep", lambda seconds: pytest.fail("beklenmemeli"))
+
+    runtime.wait_for_turn(1111)
+
+
+def test_kendi_kaydi_silinmisse_bekleme_biter(pakize_surecleri, monkeypatch):
+    """`stop --all` kaydı düşürmüşse burada takılı kalınmaz."""
+    pakize_surecleri(1111)
+    runtime.register(1111)
+    monkeypatch.setattr(runtime.time, "sleep", lambda seconds: pytest.fail("beklenmemeli"))
+
+    runtime.wait_for_turn(2222)
+
+
+def test_onde_ayni_metin_varsa_tekrar_sayilir(pakize_surecleri, zaman):
+    pakize_surecleri(1111, 2222)
+    zaman(100)
+    runtime.register(1111, text="aynı")
+    zaman(200)
+    runtime.register(2222, text="aynı")
+
+    assert runtime.earlier_duplicate(1111) is False
+    assert runtime.earlier_duplicate(2222) is True
+
+
+def test_farkli_metin_tekrar_sayilmaz(pakize_surecleri, zaman):
+    pakize_surecleri(1111, 2222)
+    zaman(100)
+    runtime.register(1111, text="bir")
+    zaman(200)
+    runtime.register(2222, text="iki")
+
+    assert runtime.earlier_duplicate(2222) is False
+
+
+def test_metinsiz_kayitlar_hicbir_seyle_eslesmez(pakize_surecleri, zaman):
+    """Kitap, tekrar ve uyarı sesleri metin taşımaz; birbirine tekrar değildir."""
+    pakize_surecleri(1111, 2222, 3333)
+    zaman(100)
+    runtime.register(1111)
+    zaman(200)
+    runtime.register(2222)
+    zaman(300)
+    runtime.register(3333, text="metin")
+
+    assert runtime.earlier_duplicate(2222) is False
+    assert runtime.earlier_duplicate(3333) is False
+
+
+def test_ayni_anda_giren_tekrarlardan_kucuk_pid_kalir(pakize_surecleri, zaman):
+    """İki basış aynı damgayı alsa da sonuç belirli: önde olan kalır, arkadaki gider."""
+    pakize_surecleri(1111, 2222)
+    zaman(500)
+    runtime.register(2222, text="aynı")
+    runtime.register(1111, text="aynı")
+
+    assert runtime.earlier_duplicate(1111) is False
+    assert runtime.earlier_duplicate(2222) is True
 
 
 def test_dikte_kaydi_calma_kaydindan_ayri_tutulur(pakize_surecleri):
