@@ -339,6 +339,157 @@ def test_ayni_anda_giren_tekrarlardan_kucuk_pid_kalir(pakize_surecleri, zaman):
     assert runtime.earlier_duplicate(2222) is True
 
 
+# --- çalma kilidi -------------------------------------------------------------
+
+
+def _kilit():
+    runtime.state_dir().mkdir(parents=True, exist_ok=True)
+    return runtime.state_dir() / runtime.LOCK_NAME
+
+
+def test_sira_basi_kilidi_alir_ve_beklemez(pakize_surecleri, monkeypatch):
+    pakize_surecleri(1111)
+    runtime.register(1111)
+    monkeypatch.setattr(runtime.time, "sleep", lambda seconds: pytest.fail("beklenmemeli"))
+
+    runtime.wait_for_turn(1111)
+
+    assert runtime.lock_holder() == 1111
+
+
+def test_sonradan_gorunen_eski_kayit_kilit_birakilana_kadar_bekler(
+    pakize_surecleri, zaman, monkeypatch
+):
+    """Eski yarış: damgası küçük kayıt, kendini baş sanan yeni kayıt çaldıktan sonra
+    görünür oluyordu ve ikisi üst üste çalıyordu. Kilit bunu kapatır."""
+    pakize_surecleri(1111, 2222)
+    zaman(200)
+    runtime.register(2222)
+    runtime.wait_for_turn(2222)  # yeni kayıt tek başına: baş olur, kilidi alır
+    zaman(100)
+    runtime.register(1111)  # eski damgalı kayıt sonradan görünür
+    assert runtime.running_pids() == [1111, 2222]  # sırada başta ama çalamaz
+
+    gorulen: list[int | None] = []
+
+    def sahte_uyku(seconds):
+        gorulen.append(runtime.lock_holder())
+        # Çalan bitti: kilidi bırakır, kaydını siler.
+        runtime.release_lock(2222)
+        runtime.clear(2222)
+
+    monkeypatch.setattr(runtime.time, "sleep", sahte_uyku)
+
+    runtime.wait_for_turn(1111)
+
+    assert gorulen == [2222]
+    assert runtime.lock_holder() == 1111
+
+
+def test_kilit_sahibiyle_ayni_metin_tekrar_sayilir(pakize_surecleri, zaman):
+    """Aynı pencerede iki özdeş metin: önce görünen çalmaya başladıysa, sırada
+    ondan önde görünen eş metin de tekrardır."""
+    pakize_surecleri(1111, 2222)
+    zaman(200)
+    runtime.register(2222, text="aynı")
+    zaman(100)
+    runtime.register(1111, text="aynı")
+    assert runtime.earlier_duplicate(1111) is False  # kilit yokken sırada önde
+
+    assert runtime.acquire_lock(2222) is True
+
+    assert runtime.earlier_duplicate(1111) is True
+
+
+def test_bayat_kilit_kaldirilip_alinir(pakize_surecleri):
+    pakize_surecleri(1111)  # 9999 yaşamıyor
+    _kilit().write_text("9999", encoding="utf-8")
+
+    assert runtime.acquire_lock(1111) is True
+    assert runtime.lock_holder() == 1111
+
+
+def test_yasayan_sahibin_kilidi_alinamaz(pakize_surecleri):
+    pakize_surecleri(1111, 2222)
+    assert runtime.acquire_lock(2222) is True
+
+    assert runtime.acquire_lock(1111) is False
+    assert runtime.lock_holder() == 2222
+
+
+def test_bos_kilit_bayat_sayilmaz(pakize_surecleri):
+    """Sahibi dosyayı açmış, numarasını henüz yazmamış olabilir."""
+    pakize_surecleri(1111)
+    _kilit().write_text("", encoding="utf-8")
+
+    assert runtime.acquire_lock(1111) is False
+    assert _kilit().exists()
+
+
+def test_taze_kilit_silinmez(pakize_surecleri, monkeypatch):
+    """Bayat okunan kilit silinmeden önce el değiştirmişse dokunulmaz."""
+    pakize_surecleri(1111, 2222)
+    _kilit().write_text("9999", encoding="utf-8")
+    okumalar = iter([9999, 2222])
+    monkeypatch.setattr(runtime, "_read_lock", lambda path: next(okumalar))
+
+    assert runtime.acquire_lock(1111) is False
+    assert _kilit().exists()
+
+
+def test_kilit_yalniz_sahibince_birakilir(pakize_surecleri):
+    pakize_surecleri(1111, 2222)
+    runtime.acquire_lock(1111)
+
+    runtime.release_lock(2222)
+    assert runtime.lock_holder() == 1111
+
+    runtime.release_lock(1111)
+    assert runtime.lock_holder() is None
+    assert not _kilit().exists()
+
+
+def test_calan_kilit_sahibidir_kilit_yoksa_sira_basi(pakize_surecleri, zaman):
+    pakize_surecleri(1111, 2222)
+    zaman(100)
+    runtime.register(1111)
+    zaman(200)
+    runtime.register(2222)
+    assert runtime.playing_pid() == 1111
+
+    runtime.acquire_lock(2222)
+    assert runtime.playing_pid() == 2222
+
+    runtime.release_lock(2222)
+    _kilit().write_text("9999", encoding="utf-8")  # bayat kilit
+    assert runtime.playing_pid() == 1111
+
+
+def test_calan_yoksa_playing_pid_none():
+    assert runtime.playing_pid() is None
+
+
+def test_silinemeyen_kayit_hata_degil_ve_canli_sayilmaz(pakize_surecleri, monkeypatch):
+    """Windows'ta açık dosya silinemez (PermissionError); kayıt yerinde kalır,
+    sahibi ölünce yok sayılır."""
+    pakize_surecleri(1111)
+    runtime.register(1111)
+    runtime.acquire_lock(1111)
+
+    def inatci_unlink(self, missing_ok=False):
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(runtime.Path, "unlink", inatci_unlink)
+
+    runtime.release_lock(1111)
+    runtime.clear(1111)
+    assert (runtime.state_dir() / "1111").exists()
+
+    pakize_surecleri()  # sahibi öldü
+    assert runtime.running_pids() == []
+    assert runtime.playing_pid() is None
+
+
 def test_dikte_kaydi_calma_kaydindan_ayri_tutulur(pakize_surecleri):
     pakize_surecleri(11, 22)
     runtime.register(11)
