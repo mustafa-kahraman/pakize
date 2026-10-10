@@ -1,8 +1,10 @@
 """Ortak test kurulumu."""
 
+import subprocess
+
 import pytest
 
-from pakize import i18n
+from pakize import desktop, i18n
 
 
 @pytest.fixture(autouse=True)
@@ -28,3 +30,29 @@ def gecici_surec_kaydi(tmp_path_factory, monkeypatch):
     monkeypatch.setenv(
         "XDG_RUNTIME_DIR", str(tmp_path_factory.mktemp("runtime"))
     )
+
+
+class _SessizSubprocess:
+    """`pakize.desktop` için `subprocess` yerine geçer; `run` komut çalıştırmaz.
+
+    Diğer her şey (`DEVNULL`, `TimeoutExpired`...) gerçek modülden gelir;
+    `tests/test_desktop.py` kendi `run` sahtesini bu nesneye takabilir.
+    """
+
+    def __getattr__(self, name):
+        return getattr(subprocess, name)
+
+    def run(self, command, **kwargs):
+        return subprocess.CompletedProcess(command, 0)
+
+
+@pytest.fixture(autouse=True)
+def masaustu_bildirimi_yok(monkeypatch):
+    """Hiçbir test gerçek masaüstü bildirimi göstermez.
+
+    Bazı yollar hatayı `desktop.notify` ile bildirir; yamalanmazsa testler
+    geliştiricinin masaüstünde gerçekten `notify-send` çalıştırır. Yalnız
+    `pakize.desktop` içindeki `subprocess` değiştirilir, global
+    `subprocess.run` değil; işçi testleri etkilenmez.
+    """
+    monkeypatch.setattr(desktop, "subprocess", _SessizSubprocess())
