@@ -1088,6 +1088,111 @@ def test_fix_eksik_argumanla_kullanim_gosterir(duzeltme_dosyasi):
     assert "Kullanım: pakize fix" in sonuc.output
 
 
+def test_fix_okunus_sozlugune_dokunmaz(duzeltme_dosyasi):
+    runner.invoke(cli.app, ["word", "Python", "paytın"])
+
+    runner.invoke(cli.app, ["fix", "Python", "python"])
+    runner.invoke(cli.app, ["fix", "--remove", "Python"])
+    config = cli.load_config(duzeltme_dosyasi)
+
+    assert config.tts_replacements == {"Python": "paytın"}
+    assert config.asr_replacements == {}
+
+
+# --- word --------------------------------------------------------------------
+
+
+def test_word_okunus_sozlugune_yazar(duzeltme_dosyasi):
+    sonuc = runner.invoke(cli.app, ["word", "Python", "paytın"])
+
+    assert sonuc.exit_code == 0
+    assert "Yazıldı: Python → paytın" in sonuc.stdout
+    metin = duzeltme_dosyasi.read_text(encoding="utf-8")
+    assert "[tts_replacements]" in metin
+    assert '"Python" = "paytın"' in metin
+    assert cli.load_config(duzeltme_dosyasi).asr_replacements == {}
+
+
+def test_word_degisiklikte_eskisini_soyler(duzeltme_dosyasi):
+    runner.invoke(cli.app, ["word", "Python", "piton"])
+
+    sonuc = runner.invoke(cli.app, ["word", "Python", "paytın"])
+
+    assert sonuc.exit_code == 0
+    assert "Değişti: Python → paytın (önce: piton)" in sonuc.stdout
+    assert cli.load_config(duzeltme_dosyasi).tts_replacements == {"Python": "paytın"}
+
+
+def test_word_list_sozlugu_gosterir(duzeltme_dosyasi):
+    runner.invoke(cli.app, ["word", "Python", "paytın"])
+    runner.invoke(cli.app, ["fix", "rümut", "remote"])
+
+    sonuc = runner.invoke(cli.app, ["word", "-l"])
+
+    assert sonuc.exit_code == 0
+    assert "Python  →  paytın" in sonuc.stdout
+    assert "rümut" not in sonuc.stdout
+
+
+def test_word_list_bos_sozlugu_soyler(duzeltme_dosyasi):
+    sonuc = runner.invoke(cli.app, ["word", "--list"])
+
+    assert sonuc.exit_code == 0
+    assert "Okunuş sözlüğü boş." in sonuc.stdout
+
+
+def test_word_remove_siler_duzeltme_tablosuna_dokunmaz(duzeltme_dosyasi):
+    runner.invoke(cli.app, ["fix", "Python", "python"])
+    runner.invoke(cli.app, ["word", "Python", "paytın"])
+
+    sonuc = runner.invoke(cli.app, ["word", "--remove", "Python"])
+
+    assert sonuc.exit_code == 0
+    assert "Silindi: Python" in sonuc.stdout
+    config = cli.load_config(duzeltme_dosyasi)
+    assert config.tts_replacements == {}
+    assert config.asr_replacements == {"Python": "python"}
+
+
+def test_word_remove_olmayani_soyler(duzeltme_dosyasi):
+    sonuc = runner.invoke(cli.app, ["word", "--remove", "yok"])
+
+    assert sonuc.exit_code == 1
+    assert "Tabloda yok: yok" in sonuc.stdout
+
+
+def test_word_eksik_argumanla_kullanim_gosterir(duzeltme_dosyasi):
+    sonuc = runner.invoke(cli.app, ["word", "Python"])
+
+    assert sonuc.exit_code == 1
+    assert (
+        "Kullanım: pakize word KELİME OKUNUŞ  (örn. pakize word Python paytın)"
+        in sonuc.output
+    )
+
+
+def test_word_argumansiz_kullanim_gosterir(duzeltme_dosyasi):
+    sonuc = runner.invoke(cli.app, ["word"])
+
+    assert sonuc.exit_code == 1
+    assert "Kullanım: pakize word" in sonuc.output
+
+
+def test_word_ile_yazilan_kelime_plan_speech_te_uygulanir(duzeltme_dosyasi):
+    """Tam yol: komutla yaz, config'i yükle, planla; okunuş metne yansır."""
+    from pakize.pipeline import plan_speech
+
+    sonuc = runner.invoke(cli.app, ["word", "Python", "paytın"])
+    assert sonuc.exit_code == 0
+
+    config = cli.load_config(duzeltme_dosyasi)
+    plan = plan_speech("Python güzeldir ama Pythonic kod zordur.", config)
+    metin = "\n".join(chunk.text for chunk in plan.chunks)
+
+    assert "paytın güzeldir" in metin
+    assert "Pythonic kod" in metin
+
+
 # --- bildirim yedeği ---------------------------------------------------------
 
 

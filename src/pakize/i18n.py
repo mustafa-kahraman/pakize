@@ -663,6 +663,20 @@ _EN: dict[str, str] = {
     "Değişti: {wrong} → {right} (önce: {previous})":
         "Changed: {wrong} → {right} (was: {previous})",
     "Yanlış ve doğru yazım boş olamaz.": "Neither the wrong nor the right spelling can be empty.",
+    # --- word ---
+    "Okunuş sözlüğüne bir satır yazar: kelime → okunuşu. "
+    "Seslendirmede bir kelimenin nasıl okunacağını belirler; her motor için geçerlidir.":
+        "Writes one line to the pronunciation dictionary: word → how it is read. "
+        "Sets how a word is spoken aloud; applies to every engine.",
+    "KELİME": "WORD",
+    "OKUNUŞ": "READING",
+    "Metinde geçen kelime.": "The word as it appears in the text.",
+    "Yerine okunacak biçim.": "The form to read aloud instead.",
+    "Sözlüğü göster.": "Show the dictionary.",
+    "KELİME için satırı sil.": "Remove the line for WORD.",
+    "Okunuş sözlüğü boş.": "The pronunciation dictionary is empty.",
+    "Kullanım: pakize word KELİME OKUNUŞ  (örn. pakize word Python paytın)":
+        "Usage: pakize word WORD READING  (e.g. pakize word Python paytın)",
     # --- dikte config açıklamaları ---
     "dikte mikrofonu, ffmpeg biçim:aygıt yazımıyla; boşsa sistem varsayılanı":
         "dictation microphone in ffmpeg's format:device form; system default if empty",

@@ -475,7 +475,7 @@ def fix(
         raise typer.Exit(code=1)
 
     if remove:
-        if remove_replacement(wrong, path):
+        if remove_replacement(wrong, path, table="asr_replacements"):
             typer.secho(_("Silindi: {key}").format(key=wrong), fg=typer.colors.GREEN)
             return
         typer.secho(
@@ -492,7 +492,7 @@ def fix(
         raise typer.Exit(code=1)
 
     try:
-        previous = set_replacement(wrong, right, path)
+        previous = set_replacement(wrong, right, path, table="asr_replacements")
     except ValueError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from None
@@ -506,6 +506,90 @@ def fix(
         typer.secho(
             _("Değişti: {wrong} → {right} (önce: {previous})").format(
                 wrong=wrong, right=right, previous=previous
+            ),
+            fg=typer.colors.GREEN,
+        )
+    typer.echo(_("Config dosyası: {path}").format(path=path))
+
+
+@app.command(
+    help=_(
+        "Okunuş sözlüğüne bir satır yazar: kelime → okunuşu. "
+        "Seslendirmede bir kelimenin nasıl okunacağını belirler; her motor için geçerlidir."
+    )
+)
+def word(
+    word: str = typer.Argument(
+        None, metavar=_("KELİME"), help=_("Metinde geçen kelime.")
+    ),
+    reading: str = typer.Argument(
+        None, metavar=_("OKUNUŞ"), help=_("Yerine okunacak biçim.")
+    ),
+    list_only: bool = typer.Option(
+        False, "--list", "-l", help=_("Sözlüğü göster.")
+    ),
+    remove: bool = typer.Option(
+        False, "--remove", help=_("KELİME için satırı sil.")
+    ),
+) -> None:
+    """Okunuş sözlüğüne bir satır yazar: kelime → okunuşu.
+
+    `fix` komutunun seslendirme tarafıdır: `[tts_replacements]` tablosuna
+    yazar. Tablo bütün kelimeyle ve büyük-küçük harfe duyarlı eşleşir; kesmeden
+    sonraki ek korunur. Bir sonraki seslendirme dosyayı yeniden okur.
+    """
+    path = config_path()
+
+    if list_only:
+        table = load_config(path).tts_replacements
+        if not table:
+            typer.secho(_("Okunuş sözlüğü boş."), fg=typer.colors.YELLOW)
+            return
+        width = max(len(key) for key in table)
+        for key, value in table.items():
+            typer.echo(f"{key:<{width}}  →  {value}")
+        return
+
+    if word is None:
+        typer.secho(
+            _("Kullanım: pakize word KELİME OKUNUŞ  (örn. pakize word Python paytın)"),
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    if remove:
+        if remove_replacement(word, path, table="tts_replacements"):
+            typer.secho(_("Silindi: {key}").format(key=word), fg=typer.colors.GREEN)
+            return
+        typer.secho(
+            _("Tabloda yok: {key}").format(key=word), fg=typer.colors.YELLOW
+        )
+        raise typer.Exit(code=1)
+
+    if reading is None:
+        typer.secho(
+            _("Kullanım: pakize word KELİME OKUNUŞ  (örn. pakize word Python paytın)"),
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        previous = set_replacement(word, reading, path, table="tts_replacements")
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from None
+
+    if previous is None:
+        typer.secho(
+            _("Yazıldı: {wrong} → {right}").format(wrong=word, right=reading),
+            fg=typer.colors.GREEN,
+        )
+    else:
+        typer.secho(
+            _("Değişti: {wrong} → {right} (önce: {previous})").format(
+                wrong=word, right=reading, previous=previous
             ),
             fg=typer.colors.GREEN,
         )
