@@ -295,6 +295,90 @@ def test_kendi_kaydi_silinmisse_bekleme_biter(pakize_surecleri, monkeypatch):
     runtime.wait_for_turn(2222)
 
 
+def test_sira_konumu_gelene_kadar_beklenir(pakize_surecleri, zaman, monkeypatch):
+    """3. sıradaki, önündekilerden biri düşüp 2. sıraya gelince döner."""
+    pakize_surecleri(1111, 2222, 3333)
+    zaman(100)
+    runtime.register(1111)
+    zaman(200)
+    runtime.register(2222)
+    zaman(300)
+    runtime.register(3333)
+    uyumalar: list[float] = []
+
+    def sahte_uyku(seconds):
+        uyumalar.append(seconds)
+        if len(uyumalar) == 2:
+            runtime.clear(1111)
+
+    monkeypatch.setattr(runtime.time, "sleep", sahte_uyku)
+
+    runtime.wait_for_position(3333, 1)
+
+    assert uyumalar == [runtime.QUEUE_POLL_SECONDS] * 2
+    # Hâlâ baş değiliz; yalnızca 2. sıraya geldik.
+    assert runtime.running_pids() == [2222, 3333]
+
+
+def test_sira_konumu_zaten_uygunsa_beklenmez(pakize_surecleri, zaman, monkeypatch):
+    """2. sıradaki için konum 1 hemen döner; baş için de öyle."""
+    pakize_surecleri(1111, 2222)
+    zaman(100)
+    runtime.register(1111)
+    zaman(200)
+    runtime.register(2222)
+    monkeypatch.setattr(runtime.time, "sleep", lambda seconds: pytest.fail("beklenmemeli"))
+
+    runtime.wait_for_position(2222, 1)
+    runtime.wait_for_position(1111, 1)
+
+
+def test_sira_konumunda_kendi_kaydi_silinmisse_bekleme_biter(pakize_surecleri, monkeypatch):
+    pakize_surecleri(1111)
+    runtime.register(1111)
+    monkeypatch.setattr(runtime.time, "sleep", lambda seconds: pytest.fail("beklenmemeli"))
+
+    runtime.wait_for_position(2222, 1)
+
+
+async def test_akici_sira_beklemesi_olay_dongusunu_bloklamaz(
+    pakize_surecleri, zaman, monkeypatch
+):
+    """Sıra `asyncio.sleep` ile yoklanır, `time.sleep` çağrılmaz."""
+    pakize_surecleri(1111, 2222)
+    zaman(100)
+    runtime.register(1111)
+    zaman(200)
+    runtime.register(2222)
+    uyumalar: list[float] = []
+
+    async def sahte_uyku(seconds):
+        uyumalar.append(seconds)
+        if len(uyumalar) == 3:
+            runtime.clear(1111)
+
+    monkeypatch.setattr(runtime.asyncio, "sleep", sahte_uyku)
+    monkeypatch.setattr(runtime.time, "sleep", lambda seconds: pytest.fail("bloklanmamalı"))
+
+    await runtime.wait_for_turn_async(2222)
+
+    assert uyumalar == [runtime.QUEUE_POLL_SECONDS] * 3
+
+
+async def test_akici_sira_bastaysa_beklenmez(pakize_surecleri, monkeypatch):
+    pakize_surecleri(1111)
+    runtime.register(1111)
+
+    async def patla(seconds):
+        pytest.fail("beklenmemeli")
+
+    monkeypatch.setattr(runtime.asyncio, "sleep", patla)
+
+    await runtime.wait_for_turn_async(1111)
+    # Kaydı silinmiş süreç de takılmaz.
+    await runtime.wait_for_turn_async(2222)
+
+
 def test_onde_ayni_metin_varsa_kayit_geri_alinir(pakize_surecleri, zaman):
     pakize_surecleri(1111, 2222)
     zaman(100)

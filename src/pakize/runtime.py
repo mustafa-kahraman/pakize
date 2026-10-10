@@ -6,13 +6,15 @@ sistemi temizler.
 
 Kayıt aynı zamanda bir kuyruktur: her çalacak süreç sıraya girer ve kendinden
 eski yaşayan kayıt kalmayana kadar bekler; böylece iki Pakize asla üst üste
-çalmaz. Sıra, kayda yazılan zaman damgasıyla belirlenir (eşitlikte küçük
-süreç numarası önde); dosya değişiklik zamanı dosya sistemine göre kaba
-olabildiği için kullanılmaz. Damga, kısa bir kayıt kilidi (`O_EXCL` ile açılan
-tek dosya) altında alınır ve kayıt aynı kilit altında görünür kılınır; böylece
-damga sırası görünürlük sırasına eşittir ve kendini sıranın başı sanan yeni bir
-kayıt eskisinin üstüne çalamaz. Kilit yalnız milisaniyeler tutulur, çalma
-boyunca değil. POSIX kilidi kullanılmaz; `O_EXCL` Windows'ta da çalışır.
+çalmaz. Çalanın hemen arkasındaki okuma sesini önceden üretebilir ama o da
+çalmak için sıranın başını bekler. Sıra, kayda yazılan zaman damgasıyla
+belirlenir (eşitlikte küçük süreç numarası önde); dosya değişiklik zamanı
+dosya sistemine göre kaba olabildiği için kullanılmaz. Damga, kısa bir kayıt
+kilidi (`O_EXCL` ile açılan tek dosya) altında alınır ve kayıt aynı kilit
+altında görünür kılınır; böylece damga sırası görünürlük sırasına eşittir ve
+kendini sıranın başı sanan yeni bir kayıt eskisinin üstüne çalamaz. Kilit
+yalnız milisaniyeler tutulur, çalma boyunca değil. POSIX kilidi kullanılmaz;
+`O_EXCL` Windows'ta da çalışır.
 
 Kayıt yalnızca bir ipucudur: süreç kimlikleri yeniden kullanılabildiği için
 okurken sürecin gerçekten Pakize olduğu doğrulanır.
@@ -25,6 +27,7 @@ Tek kod yolu ancak bu soyutlamayla mümkün.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -207,17 +210,38 @@ def running_pid() -> int | None:
     return pids[0] if pids else None
 
 
-def wait_for_turn(pid: int, name: str = STATE_NAME) -> None:
-    """Sürecin önündeki kayıtlar bitene kadar bekler.
+def wait_for_position(pid: int, position: int, name: str = STATE_NAME) -> None:
+    """Sürecin sıradaki yeri `position`'ı geçmeyene kadar bekler.
+
+    0 sıranın başıdır, yani çalma sırası; 1 çalanın hemen arkasıdır. Sıradaki
+    okuma, çalan biterken arkada hazırlanabilsin diye 1 ile beklenir.
 
     Kendi kaydı silinmişse de döner: `pakize stop` süreci zaten
     sonlandırıyordur, burada takılı kalmanın anlamı yok.
     """
-    while True:
-        pids = running_pids(name)
-        if pid not in pids or pids[0] == pid:
-            return
+    while not _at_position(pid, position, name):
         time.sleep(QUEUE_POLL_SECONDS)
+
+
+def wait_for_turn(pid: int, name: str = STATE_NAME) -> None:
+    """Sürecin önündeki kayıtlar bitene kadar bekler."""
+    wait_for_position(pid, 0, name)
+
+
+async def wait_for_turn_async(pid: int, name: str = STATE_NAME) -> None:
+    """`wait_for_turn` ile aynı iş; olay döngüsünü bloklamaz.
+
+    Akıcı çalmada sıra beklenirken arkada parça üretimi sürer; o yüzden
+    yoklama `asyncio.sleep` ile yapılır.
+    """
+    while not _at_position(pid, 0, name):
+        await asyncio.sleep(QUEUE_POLL_SECONDS)
+
+
+def _at_position(pid: int, position: int, name: str) -> bool:
+    """Sürecin sıradaki indeksi `position`'ı geçmiyor mu? Kaydı yoksa da True."""
+    pids = running_pids(name)
+    return pid not in pids or pids.index(pid) <= position
 
 
 def _duplicate_registered(pid: int, name: str = STATE_NAME) -> bool:
