@@ -247,6 +247,7 @@ pakize book kitap.epub        # bir kitabı bölüm bölüm seslendir
 pakize dictate                # dikte: kaydet, metne çevir, panoya koy (ikinci çağrı bitirir)
 pakize transcribe kayit.wav   # bir ses dosyasındaki konuşmayı metne çevir
 pakize fix rümut remote       # dikte hep yanlış yazıyorsa: düzeltme tablosuna satır ekle
+pakize word Python paytın     # bir kelime nasıl okunsun: okunuş sözlüğüne satır ekle
 pakize pause                  # çalmayı duraklat; duraklatılmışsa sürdür (aynı komut)
 pakize stop                   # çalanı ve sırada bekleyenleri durdur
 pakize skip                   # çalanı kes; sıradaki varsa başlar
@@ -538,6 +539,14 @@ değişir, `Pythonic` olduğu gibi kalır. Kesmeden sonraki ek korunur:
 [tts_replacements]
 "Python" = "paytın"
 "KVKK" = "ka ve ka ka"
+```
+
+Sözlüğe dosyayı açmadan satır eklemek için:
+
+```bash
+pakize word Python paytın     # yazar; varsa üzerine yazar
+pakize word --list            # sözlüğü göster
+pakize word --remove Python   # satırı sil
 ```
 
 Politikanın atladığı içerik (linkler gibi) tablodan etkilenmez; `--dry-run`

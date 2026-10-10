@@ -255,6 +255,7 @@ pakize book book.epub         # narrate a book chapter by chapter
 pakize dictate                # dictate: record, transcribe, copy (a second call finishes)
 pakize transcribe rec.wav     # transcribe the speech in an audio file
 pakize fix rümut remote       # dictation keeps getting a word wrong: add a correction
+pakize word Python paytın     # decide how a word is read aloud: add it to the dictionary
 pakize pause                  # pause playback; resume if paused (same command)
 pakize stop                   # stop the current playback and everything waiting
 pakize skip                   # cut the current playback; the next in line starts
@@ -553,6 +554,14 @@ after an apostrophe is kept: `KVKK'nın` → `ka ve ka ka'nın`.
 [tts_replacements]
 "Python" = "paytın"
 "KVKK" = "ka ve ka ka"
+```
+
+To add a line without opening the file:
+
+```bash
+pakize word Python paytın     # writes it; overwrites an existing entry
+pakize word --list            # show the dictionary
+pakize word --remove Python   # delete the line
 ```
 
 Content the policy skips (links, for example) is not affected by the table;
