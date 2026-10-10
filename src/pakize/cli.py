@@ -30,7 +30,13 @@ from .config import (
 from .asr import AsrError, asr_server, create_asr_engine
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
-from .pipeline import SpeechResult, TranslationError, plan_speech, synthesize
+from .pipeline import (
+    PartReadyCallback,
+    SpeechResult,
+    TranslationError,
+    plan_speech,
+    synthesize,
+)
 from .sources import (
     ClipboardError,
     Roles,
@@ -160,21 +166,28 @@ def speak(
     destination = output or _default_output_path(config)
     # Akıcı modda parçalar üretildikçe çalınır; sonda ikinci kez çalmayız.
     streaming = play and config.stream
+    pid = os.getpid()
     try:
         # Üretim ve çalma tek kayıt altında: arada kayıt düşerse sıradaki
-        # başlar ve bu okuma sıranın sonuna atılırdı.
+        # başlar ve bu okuma sıranın sonuna atılırdı. Üretim, çalanın hemen
+        # arkasına (1. sıra) gelince başlar: sıradaki okuma çalan biterken
+        # arkada hazırlanır. Çalma yine sıranın başını bekler.
         with _stoppable(
-            play, text=text, on_queued=lambda: _play_tone("accept", config)
+            play,
+            text=text,
+            on_queued=lambda: _play_tone("accept", config),
+            position=1,
         ):
             result = synthesize(
                 text,
                 destination,
                 config,
                 progress=_progress,
-                on_part_ready=audio.play_async if streaming else None,
+                on_part_ready=_queued_player(pid) if streaming else None,
             )
             _print_result(result, config)
             if play and not streaming:
+                runtime.wait_for_turn(pid)
                 audio.play(result.output)
     except _DuplicateText:
         _play_tone("duplicate", config)
@@ -1255,14 +1268,17 @@ def _stoppable(
     enabled: bool,
     text: str | None = None,
     on_queued: Callable[[], None] | None = None,
+    position: int = 0,
 ):
     """Çalmayı okuma sırasına sokar ve süreci `pakize stop` ile durdurulabilir kılar.
 
-    Süreç önce kayda girer, sonra önündekiler bitene kadar bekler; gövde
-    ancak sıra gelince çalışır. `text` verilmişse ve sırada aynı metin zaten
-    varsa kayıt geri alınır, `_DuplicateText` yükseltilir ve gövde hiç
-    çalışmaz. `on_queued` sıraya girildiği an, beklemeden önce çağrılır
-    ("alındı" tonu için).
+    Süreç önce kayda girer, sonra sıradaki yeri `position`'a inene kadar
+    bekler; gövde ancak o zaman çalışır. Varsayılan 0 sıranın başıdır: gövde
+    doğrudan çalabilir. `speak` 1 verir: üretim çalanın arkasında başlar,
+    çalmadan önce gövde sıranın başını kendisi bekler. `text` verilmişse ve
+    sırada aynı metin zaten varsa kayıt geri alınır, `_DuplicateText`
+    yükseltilir ve gövde hiç çalışmaz. `on_queued` sıraya girildiği an,
+    beklemeden önce çağrılır ("alındı" tonu için).
 
     Sinyal geldiğinde önce çalan ses kesilir, sonra `KeyboardInterrupt`
     yükseltilir; böylece Ctrl+C ile `pakize stop` aynı yoldan ilerler ve
@@ -1287,12 +1303,27 @@ def _stoppable(
             raise _DuplicateText
         if on_queued is not None:
             on_queued()
-        runtime.wait_for_turn(pid)
+        runtime.wait_for_position(pid, position)
         yield
     finally:
         runtime.clear(pid)
         for sig, previous in previous_handlers.items():
             signal.signal(sig, previous)
+
+
+def _queued_player(pid: int) -> PartReadyCallback:
+    """Akıcı çalma için parça çalıcı: her parçadan önce sıranın başı beklenir.
+
+    Üretim çalanın arkasında başladığı için ilk parça hazır olduğunda sıra
+    henüz gelmemiş olabilir. Bekleme olay döngüsünü bloklamaz; bu sırada
+    sonraki parçaların üretimi sürer. Parçalar yine üretim sırasıyla çalınır.
+    """
+
+    async def play_part(part: Path) -> None:
+        await runtime.wait_for_turn_async(pid)
+        await audio.play_async(part)
+
+    return play_part
 
 
 def _chapter_progress(chapter: book.Chapter, total: int, skipped: bool) -> None:

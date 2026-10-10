@@ -4,6 +4,7 @@ Hermetiktir: gerçek TTS çağrısı ve ses çalma yamalanır, çıktı dizini g
 klasöre yönlendirilir.
 """
 
+import asyncio
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -178,11 +179,19 @@ def test_akici_modda_ses_parcalar_uzerinden_calinir(
         return SpeechResult(output=destination, plan=Plan(), engine=config.engine)
 
     monkeypatch.setattr(cli, "synthesize", sahte_synthesize)
+    akici_calinan: list[Path] = []
+
+    async def sahte_play_async(path):
+        akici_calinan.append(path)
+
+    monkeypatch.setattr(cli.audio, "play_async", sahte_play_async)
 
     sonuc = runner.invoke(cli.app, ["speak", "--stream"], input="Merhaba.\n")
 
     assert sonuc.exit_code == 0
-    assert gecen["on_part_ready"] is cli.audio.play_async
+    # Parça geri çağrısı sırayı bekleyip `play_async` ile çalar.
+    asyncio.run(gecen["on_part_ready"](Path("parca.mp3")))
+    assert akici_calinan == [Path("parca.mp3")]
     # Akıcı modda sonda ikinci kez çalınmaz.
     assert calinanlar == []
 
@@ -430,17 +439,166 @@ def test_ton_calinamazsa_uyarir_ve_okuma_surer(kuyruk, monkeypatch, bozuk):
     assert len(kuyruk["uretilen"]) == 1
 
 
-def test_sira_gelmeden_uretim_baslamaz(kuyruk):
+def test_ikinci_siradaki_bas_kayittayken_uretir_ama_bas_dusmeden_calmaz(kuyruk, monkeypatch):
+    """Sıradaki okuma çalan biterken arkada hazırlanır; çalmak için başı bekler."""
     cli.runtime.register(ONDEKI_PID, text="Başka bir metin.")
     kuyruk["ilk_uykuda"] = lambda: cli.runtime.clear(ONDEKI_PID)
+    calarken: list[list[int]] = []
+    monkeypatch.setattr(
+        cli.audio, "play", lambda path: calarken.append(cli.runtime.running_pids())
+    )
 
     sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
 
     assert sonuc.exit_code == 0
+    # Üretim başladığında öndeki hâlâ kayıttaydı...
+    assert kuyruk["uretilen"] == [("Merhaba.\n", [ONDEKI_PID, os.getpid()])]
+    # ...çalma ise öndeki düşene kadar bekledi.
     assert kuyruk["uykular"] == 1
-    # Üretim başladığında öndeki gitmiş, sırada yalnız biz varız.
-    assert kuyruk["uretilen"] == [("Merhaba.\n", [os.getpid()])]
+    assert calarken == [[os.getpid()]]
     assert cli.runtime.running_pids() == []
+
+
+def test_akici_modda_ikinci_siradaki_uretir_ama_bas_dusmeden_calmaz(kuyruk, monkeypatch):
+    from pakize.pipeline import Plan, SpeechResult
+
+    cli.runtime.register(ONDEKI_PID, text="Başka.\n")
+    parca = Path("parca.mp3")
+    durum: dict = {"beklemeler": [], "calinan": []}
+
+    async def sahte_play_async(path):
+        durum["calinan"].append((path, cli.runtime.running_pids()))
+
+    async def sahte_async_uyku(seconds):
+        durum["beklemeler"].append(seconds)
+        cli.runtime.clear(ONDEKI_PID)
+
+    def sahte_synthesize(text, destination, config, progress=None, on_part_ready=None):
+        durum["uretilirken"] = cli.runtime.running_pids()
+        asyncio.run(on_part_ready(parca))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"sahte-ses")
+        return SpeechResult(output=destination, plan=Plan(), engine=config.engine)
+
+    monkeypatch.setattr(cli.audio, "play_async", sahte_play_async)
+    monkeypatch.setattr(cli.runtime.asyncio, "sleep", sahte_async_uyku)
+    monkeypatch.setattr(cli, "synthesize", sahte_synthesize)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    assert durum["uretilirken"] == [ONDEKI_PID, os.getpid()]
+    # Sıra olay döngüsü içinde yoklandı; `time.sleep` hiç çağrılmadı.
+    assert durum["beklemeler"] == [cli.runtime.QUEUE_POLL_SECONDS]
+    assert kuyruk["uykular"] == 0
+    assert durum["calinan"] == [(parca, [os.getpid()])]
+
+
+def test_ucuncu_siradaki_ikinci_siraya_gelene_kadar_uretime_baslamaz(kuyruk, monkeypatch):
+    """Aynı anda en çok iki okuma hazırlanır: çalan ve hemen arkasındaki."""
+    IKINCI_PID = 2222
+    cli.runtime.register(ONDEKI_PID, text="Bir.\n")
+    cli.runtime.register(IKINCI_PID, text="İki.\n")
+    uykular: list[tuple[list[int], int]] = []
+
+    def sahte_uyku(seconds):
+        uykular.append((cli.runtime.running_pids(), len(kuyruk["uretilen"])))
+        # Öndeki biter.
+        cli.runtime.clear(cli.runtime.running_pid())
+
+    monkeypatch.setattr(cli.runtime.time, "sleep", sahte_uyku)
+    calarken: list[list[int]] = []
+    monkeypatch.setattr(
+        cli.audio, "play", lambda path: calarken.append(cli.runtime.running_pids())
+    )
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    # 1. uyku: 3. sıradayız, üretim yok. 2. uyku: 2. sıradayız, üretim bitti, çalma bekliyor.
+    assert uykular == [
+        ([ONDEKI_PID, IKINCI_PID, os.getpid()], 0),
+        ([IKINCI_PID, os.getpid()], 1),
+    ]
+    assert kuyruk["uretilen"] == [("Merhaba.\n", [IKINCI_PID, os.getpid()])]
+    assert calarken == [[os.getpid()]]
+
+
+def test_akici_modda_sira_beklenirken_parca_uretimi_surer(tmp_path, kuyruk, monkeypatch):
+    """Baş kayıttayken tüm parçalar üretilir, hiçbiri çalınmaz; baş düşünce sırayla çalar."""
+    from pakize import pipeline
+    from pakize.engines.base import TtsEngine
+
+    gercek_uyku = asyncio.sleep
+    uretilen: list[tuple[str, list[int]]] = []
+    calinan: list[tuple[str, list[int]]] = []
+    durum: dict = {"beklemeler": 0}
+
+    class SahteMotor(TtsEngine):
+        name = "sahte"
+        output_suffix = ".txt"
+
+        def ensure_available(self) -> None:
+            return None
+
+        async def synthesize(self, text: str, destination: Path) -> None:
+            # Üretim bir tur sürsün ki sıra beklenirken ilerleyebildiği görülsün.
+            await gercek_uyku(0)
+            uretilen.append((text, cli.runtime.running_pids()))
+            destination.write_text(text, encoding="utf-8")
+
+    def sahte_concat(parts, destination):
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            "\n".join(p.read_text(encoding="utf-8") for p in parts), encoding="utf-8"
+        )
+        return destination
+
+    async def sahte_play_async(path):
+        calinan.append((path.read_text(encoding="utf-8"), cli.runtime.running_pids()))
+
+    async def sahte_async_uyku(seconds):
+        durum["beklemeler"] += 1
+        if durum["beklemeler"] > 10:
+            pytest.fail("sıra hiç gelmedi")
+        # Olay döngüsü dönsün; arkadaki üretim görevleri ilerlesin.
+        await gercek_uyku(0)
+        if len(uretilen) == 3:
+            durum["bas_duserken"] = (len(uretilen), len(calinan))
+            cli.runtime.clear(ONDEKI_PID)
+
+    config = replace(
+        Config(),
+        output_dir=tmp_path / "sesler",
+        engine="sahte",
+        fallback_engine=None,
+        max_chunk_chars=12,
+        stream=True,
+    )
+    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(cli, "synthesize", pipeline.synthesize)
+    monkeypatch.setattr(pipeline, "create_engine", lambda name, cfg: SahteMotor(cfg))
+    monkeypatch.setattr(pipeline, "concat", sahte_concat)
+    monkeypatch.setattr(cli.audio, "play_async", sahte_play_async)
+    monkeypatch.setattr(cli.runtime.asyncio, "sleep", sahte_async_uyku)
+    cli.runtime.register(ONDEKI_PID, text="Başka.\n")
+
+    sonuc = runner.invoke(
+        cli.app, ["speak", "--stream"], input="Bir cümle. İki cümle. Üç cümle.\n"
+    )
+
+    assert sonuc.exit_code == 0, sonuc.output
+    # İlk parça baş kayıttayken üretildi; baş düştüğünde üçü de hazırdı, hiçbiri çalınmamıştı.
+    assert uretilen[0] == ("Bir cümle.", [ONDEKI_PID, os.getpid()])
+    assert durum["bas_duserken"] == (3, 0)
+    # Baş düşünce parçalar üretim sırasıyla ve sıranın başı olarak çalındı.
+    assert calinan == [
+        ("Bir cümle.", [os.getpid()]),
+        ("İki cümle.", [os.getpid()]),
+        ("Üç cümle.", [os.getpid()]),
+    ]
+    # Olay döngüsü bloklanmadı: `time.sleep` hiç çağrılmadı.
+    assert kuyruk["uykular"] == 0
 
 
 def test_ayni_metin_siradaysa_basis_yok_sayilir(kuyruk, tonlar):
@@ -497,7 +655,9 @@ def test_kayit_sirasinda_durdurulan_surec_130_ile_cikar_kayit_birakmaz(kuyruk, m
 
 
 def test_beklerken_durdurulan_surec_130_ile_cikar_kayit_birakmaz(kuyruk):
+    """3. sıradaki, üretime başlamadan beklerken kesilir."""
     cli.runtime.register(ONDEKI_PID, text="Başka.\n")
+    cli.runtime.register(2222, text="Bir başka.\n")
 
     def sinyal():
         raise KeyboardInterrupt
@@ -509,7 +669,100 @@ def test_beklerken_durdurulan_surec_130_ile_cikar_kayit_birakmaz(kuyruk):
     assert sonuc.exit_code == 130
     assert "Durduruldu." in sonuc.stdout
     assert kuyruk["uretilen"] == []
+    assert cli.runtime.running_pids() == [ONDEKI_PID, 2222]
+
+
+def test_hazirlanirken_durdurulan_surec_130_ile_cikar_kayit_birakmaz(kuyruk, monkeypatch):
+    """2. sıradaki, arkada üretim yaparken kesilir."""
+    cli.runtime.register(ONDEKI_PID, text="Başka.\n")
+
+    def kesilen_synthesize(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "synthesize", kesilen_synthesize)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 130
+    assert "Durduruldu." in sonuc.stdout
+    assert kuyruk["uykular"] == 0
     assert cli.runtime.running_pids() == [ONDEKI_PID]
+    assert not (cli.runtime.state_dir() / str(os.getpid())).exists()
+
+
+def test_calmayi_beklerken_durdurulan_surec_130_ile_cikar_kayit_birakmaz(kuyruk, monkeypatch):
+    """2. sıradaki, üretimi bitmiş çalmak için başı beklerken kesilir."""
+    cli.runtime.register(ONDEKI_PID, text="Başka.\n")
+
+    def sinyal():
+        raise KeyboardInterrupt
+
+    kuyruk["ilk_uykuda"] = sinyal
+    monkeypatch.setattr(cli.audio, "play", lambda path: pytest.fail("çalınmamalı"))
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 130
+    assert "Durduruldu." in sonuc.stdout
+    assert len(kuyruk["uretilen"]) == 1
+    assert cli.runtime.running_pids() == [ONDEKI_PID]
+    assert not (cli.runtime.state_dir() / str(os.getpid())).exists()
+
+
+def test_akici_modda_calmayi_beklerken_durdurulan_surec_130_ile_cikar(kuyruk, monkeypatch):
+    from pakize.pipeline import Plan, SpeechResult
+
+    cli.runtime.register(ONDEKI_PID, text="Başka.\n")
+
+    async def sinyal(seconds):
+        raise KeyboardInterrupt
+
+    async def calinmamali(path):
+        pytest.fail("çalınmamalı")
+
+    def sahte_synthesize(text, destination, config, progress=None, on_part_ready=None):
+        asyncio.run(on_part_ready(Path("parca.mp3")))
+        pytest.fail("ilk parçada kesilmeliydi")
+
+    monkeypatch.setattr(cli.runtime.asyncio, "sleep", sinyal)
+    monkeypatch.setattr(cli.audio, "play_async", calinmamali)
+    monkeypatch.setattr(cli, "synthesize", sahte_synthesize)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 130
+    assert "Durduruldu." in sonuc.stdout
+    assert cli.runtime.running_pids() == [ONDEKI_PID]
+    assert not (cli.runtime.state_dir() / str(os.getpid())).exists()
+
+
+def test_sonraki_basi_kesince_hazir_olan_ikinci_calar(kuyruk, monkeypatch):
+    """`skip` yalnız başı keser; arkada hazırlanmış okuma hemen çalmaya başlar."""
+    cli.runtime.register(ONDEKI_PID, text="Başka.\n")
+    durdurulan: list[int] = []
+
+    def sahte_stop(pid):
+        # Kesilen süreç çıkarken kaydını kendisi düşürür.
+        durdurulan.append(pid)
+        cli.runtime.clear(pid)
+        return True
+
+    monkeypatch.setattr(cli.runtime, "stop", sahte_stop)
+    kuyruk["ilk_uykuda"] = cli.skip
+    calarken: list[list[int]] = []
+    monkeypatch.setattr(
+        cli.audio, "play", lambda path: calarken.append(cli.runtime.running_pids())
+    )
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    assert "Sonrakine geçildi." in sonuc.stdout
+    assert durdurulan == [ONDEKI_PID]
+    # Üretim `skip`ten önce bitmişti; `skip` sonrası ilk yoklamada çalındı.
+    assert kuyruk["uretilen"] == [("Merhaba.\n", [ONDEKI_PID, os.getpid()])]
+    assert kuyruk["uykular"] == 1
+    assert calarken == [[os.getpid()]]
 
 
 def test_replay_sirasini_bekler(cikti_dizini, kuyruk, monkeypatch):
