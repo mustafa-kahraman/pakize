@@ -179,7 +179,7 @@ def speak(
     except _DuplicateText:
         _play_tone("duplicate", config)
         typer.secho(
-            _("Aynı metin zaten sırada; bu okuma atlandı."), fg=typer.colors.YELLOW
+            _("Aynı metin zaten sırada; bu basış yok sayıldı."), fg=typer.colors.YELLOW
         )
         return
     except KeyboardInterrupt:
@@ -546,26 +546,39 @@ def pause() -> None:
     )
 
 
-@app.command(help=_("Çalmakta olan seslendirmeyi durdurur; sıradaki başlar."))
-def stop(
-    everything: bool = typer.Option(
-        False, "--all", help=_("Sıradakilerle birlikte tüm seslendirmeleri durdur.")
-    ),
-) -> None:
-    """Çalmakta olan seslendirmeyi durdurur; sıradaki başlar.
-
-    Varsayılan "atla"dır: yalnızca sıranın başındaki, yani çalan kesilir ve
-    bekleyen ilk okuma kendiliğinden başlar. `--all` bekleyenleri de bitirir.
-    """
+@app.command(help=_("Çalmakta olan seslendirmeyi durdurur."))
+def stop() -> None:
+    """Çalmakta olan seslendirmeyi ve sırada bekleyenleri durdurur."""
     pids = runtime.running_pids()
     if not pids:
         typer.secho(_("Çalan bir seslendirme yok."), fg=typer.colors.YELLOW)
         raise typer.Exit(code=1)
 
-    targets = pids if everything else pids[:1]
-    affected = sum(runtime.stop(pid) for pid in targets)
+    # Hepsi durdurulur: "durdur" demek sesin kesilmesi demektir; bekleyenler
+    # kalsa sıradaki hemen başlar ve kullanıcı susturamamış olurdu.
+    affected = sum(runtime.stop(pid) for pid in pids)
     _report(
-        affected, len(targets), _("Durduruldu"), _("Seslendirme zaten sonlanmış.")
+        affected, len(pids), _("Durduruldu"), _("Seslendirme zaten sonlanmış.")
+    )
+
+
+@app.command(help=_("Çalan seslendirmeyi keser; sıradaki başlar."))
+def skip() -> None:
+    """Çalan seslendirmeyi keser; sıradaki başlar.
+
+    Yalnızca kilidi tutan, yani çalan süreç sonlandırılır; bekleyen ilk okuma
+    kilidi alıp kendiliğinden başlar.
+    """
+    target = runtime.playing_pid()
+    if target is None:
+        typer.secho(_("Çalan bir seslendirme yok."), fg=typer.colors.YELLOW)
+        raise typer.Exit(code=1)
+
+    _report(
+        int(runtime.stop(target)),
+        1,
+        _("Sonrakine geçildi"),
+        _("Seslendirme zaten sonlanmış."),
     )
 
 
@@ -1161,10 +1174,11 @@ def _stoppable(
 ):
     """Çalmayı okuma sırasına sokar ve süreci `pakize stop` ile durdurulabilir kılar.
 
-    Süreç önce kayda girer, sonra önündekiler bitene kadar bekler; gövde
-    ancak sıra gelince çalışır. `text` verilmişse sırada daha önde aynı metin
-    varken `_DuplicateText` yükseltilir ve gövde hiç çalışmaz. `on_queued`
-    sıraya girildiği an, beklemeden önce çağrılır ("alındı" tonu için).
+    Süreç önce kayda girer, sonra sıranın başına gelip çalma kilidini alana
+    kadar bekler; gövde ancak o zaman çalışır. `text` verilmişse sırada daha
+    önde ya da kilidi tutan kayıtta aynı metin varken `_DuplicateText`
+    yükseltilir ve gövde hiç çalışmaz. `on_queued` sıraya girildiği an,
+    beklemeden önce çağrılır ("alındı" tonu için).
 
     Sinyal geldiğinde önce çalan ses kesilir, sonra `KeyboardInterrupt`
     yükseltilir; böylece Ctrl+C ile `pakize stop` aynı yoldan ilerler ve
@@ -1193,6 +1207,7 @@ def _stoppable(
         runtime.wait_for_turn(pid)
         yield
     finally:
+        runtime.release_lock(pid)
         runtime.clear(pid)
         for sig, previous in previous_handlers.items():
             signal.signal(sig, previous)
