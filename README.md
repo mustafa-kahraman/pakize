@@ -247,7 +247,8 @@ pakize dictate                # dikte: kaydet, metne çevir, panoya koy (ikinci 
 pakize transcribe kayit.wav   # bir ses dosyasındaki konuşmayı metne çevir
 pakize fix rümut remote       # dikte hep yanlış yazıyorsa: düzeltme tablosuna satır ekle
 pakize pause                  # çalmayı duraklat; duraklatılmışsa sürdür (aynı komut)
-pakize stop                   # çalmakta olan seslendirmeyi durdur
+pakize stop                   # çalanı atla; sıradaki varsa başlar
+pakize stop --all             # çalanı ve sırada bekleyenleri durdur
 pakize replay                 # en son üretilen sesi yeniden çal
 pakize replay --list          # son üretilen sesleri tarihiyle listele
 pakize replay --list -n 30    # daha fazlasını göster
@@ -557,7 +558,7 @@ sistemine bağlıdır ve kurmak gerekir:
 sudo apt install xclip      # X11 için (Wayland'de: wl-clipboard)
 ```
 
-Dört kısayol yeterli. `pause` tek başına hem duraklatır hem sürdürür, o
+Beş kısayol yeterli. `pause` tek başına hem duraklatır hem sürdürür, o
 yüzden "devam et" için ayrı bir tuşa gerek yok; `dictate` de aynı tuşla hem
 başlar hem biter:
 
@@ -565,8 +566,15 @@ başlar hem biter:
 |----|-------|---------------|-------|
 | `Pakize: panodakini oku` | `pakize speak --clipboard` | `Super+S` | `⌥⌘S` |
 | `Pakize: duraklat` | `pakize pause` | `Super+Space` | `⌥⌘Space` |
-| `Pakize: durdur` | `pakize stop` | `Shift+Super+D` | `⇧⌥⌘D` |
+| `Pakize: atla` | `pakize stop` | `Shift+Super+D` | `⇧⌥⌘D` |
+| `Pakize: hepsini durdur` | `pakize stop --all` | `Ctrl+Shift+Super+D` | `⌃⇧⌥⌘D` |
 | `Pakize: dikte` | `pakize dictate` | `Super+W` | `⌥⌘W` |
+
+Okumalar sıraya girer: tuşa bastığın an kısa, yükselen bir "alındı" tonu
+duyarsın; çalan bir şey varsa yeni metin onun bitmesini bekler, iki okuma asla
+üst üste binmez. `stop` çalanı atlar ve sıradaki hemen başlar; `stop --all`
+bekleyenlerle birlikte hepsini susturur. Aynı metin için tuşa ikinci kez
+basarsan tek, pes bir ton duyarsın ve o basış yok sayılır.
 
 ### Linux (GNOME)
 
@@ -594,7 +602,8 @@ kur() {  # kur <anahtar> <komut> <tuş> <ad>
 YOLLAR=$(
   kur pakize-oku   "pakize speak --clipboard" '<Super>s'        'Pakize: panodakini oku'
   kur pakize-pause "pakize pause"             '<Super>space'    'Pakize: duraklat'
-  kur pakize-stop  "pakize stop"              '<Shift><Super>d' 'Pakize: durdur'
+  kur pakize-stop  "pakize stop"              '<Shift><Super>d' 'Pakize: atla'
+  kur pakize-stop-all "pakize stop --all"     '<Control><Shift><Super>d' 'Pakize: hepsini durdur'
   kur pakize-dikte "pakize dictate"           '<Super>w'        'Pakize: dikte'
 )
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
@@ -645,7 +654,7 @@ $HOME/.local/bin/pakize speak --clipboard
 ```
 
 4. `Pakize: panodakini oku` adıyla kaydet; aynısını `pakize pause`,
-   `pakize stop` ve `pakize dictate` için tekrarla.
+   `pakize stop`, `pakize stop --all` ve `pakize dictate` için tekrarla.
 5. **Sistem Ayarları → Klavye → Klavye Kısayolları → Hizmetler → Genel** —
    Hızlı İşlemlerin yanına tuşları yaz.
 
@@ -660,6 +669,7 @@ tek dosyada birkaç satır yeter:
 alt + cmd - s : $HOME/.local/bin/pakize speak --clipboard
 alt + cmd - space : $HOME/.local/bin/pakize pause
 shift + alt + cmd - d : $HOME/.local/bin/pakize stop
+ctrl + shift + alt + cmd - d : $HOME/.local/bin/pakize stop --all
 alt + cmd - w : $HOME/.local/bin/pakize dictate
 ```
 
@@ -677,7 +687,7 @@ Sistemle gelen yol kısayol dosyasıdır (`.lnk`); ek yazılım gerekmez.
 3. `Pakize: panodakini oku` adıyla kaydet.
 4. Kısayola **sağ tık → Özellikler → Kısayol tuşu** alanına tıkla ve tuş
    bileşimine bas (`Ctrl+Alt+S` gibi).
-5. Aynısını `pause`, `stop` ve `dictate` için tekrarla.
+5. Aynısını `pause`, `stop`, `stop --all` ve `dictate` için tekrarla.
 
 > Bu yöntemde her basışta kısa bir konsol penceresi yanıp söner. Rahatsız
 > ediyorsa **Çalıştır** alanını *Simge durumunda* yap ya da
@@ -688,6 +698,7 @@ Sistemle gelen yol kısayol dosyasıdır (`.lnk`); ek yazılım gerekmez.
 #s::Run('pakize.exe speak --clipboard', , 'Hide')
 #Space::Run('pakize.exe pause', , 'Hide')
 +#d::Run('pakize.exe stop', , 'Hide')
+^+#d::Run('pakize.exe stop --all', , 'Hide')
 #w::Run('pakize.exe dictate', , 'Hide')
 ```
 
@@ -716,11 +727,12 @@ seçer, kısayol ise ev dizininde çalışır. Bağlamak istersen komuta
 
 Bu komutlar `pakize replay` ile başlattığın çalmayı da yönetir.
 
-Aynı anda birden çok seslendirme çalıyorsa (iki ayrı terminalden başlattıysan)
-ikisi de yönetilir — `stop` hepsini durdurur, `pause` hepsini duraklatır:
+Birden çok seslendirme başlattıysan (iki ayrı terminalden ya da tuşa art arda
+basarak) sıraya girerler ve teker teker çalar. `stop` ve `pause` çalana
+bakar; `stop --all` bekleyenleri de bitirir:
 
 ```
-$ pakize stop
+$ pakize stop --all
 Durduruldu. (2 seslendirme)
 ```
 

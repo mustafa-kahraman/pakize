@@ -254,7 +254,8 @@ pakize dictate                # dictate: record, transcribe, copy (a second call
 pakize transcribe rec.wav     # transcribe the speech in an audio file
 pakize fix rümut remote       # dictation keeps getting a word wrong: add a correction
 pakize pause                  # pause playback; resume if paused (same command)
-pakize stop                   # stop the playback in progress
+pakize stop                   # skip the current playback; the next in line starts
+pakize stop --all             # stop the current playback and everything waiting
 pakize replay                 # replay the most recently produced audio
 pakize replay --list          # list recent recordings with timestamps
 pakize replay --list -n 30    # show more of them
@@ -574,7 +575,7 @@ window system and has to be installed:
 sudo apt install xclip      # for X11 (on Wayland: wl-clipboard)
 ```
 
-Four shortcuts are enough. `pause` both pauses and resumes on its own, so no
+Five shortcuts are enough. `pause` both pauses and resumes on its own, so no
 separate "resume" key is needed; `dictate` likewise starts and finishes with
 the same key:
 
@@ -582,8 +583,16 @@ the same key:
 |------|---------|---------------|-------|
 | `Pakize: read clipboard` | `pakize speak --clipboard` | `Super+S` | `⌥⌘S` |
 | `Pakize: pause` | `pakize pause` | `Super+Space` | `⌥⌘Space` |
-| `Pakize: stop` | `pakize stop` | `Shift+Super+D` | `⇧⌥⌘D` |
+| `Pakize: skip` | `pakize stop` | `Shift+Super+D` | `⇧⌥⌘D` |
+| `Pakize: stop all` | `pakize stop --all` | `Ctrl+Shift+Super+D` | `⌃⇧⌥⌘D` |
 | `Pakize: dictate` | `pakize dictate` | `Super+W` | `⌥⌘W` |
+
+Readings are queued: the moment you press the key you hear a short rising
+"accepted" tone; if something is already playing, the new text waits for it to
+finish, so two readings never overlap. `stop` skips the current one and the
+next in line starts right away; `stop --all` silences everything, including
+what is waiting. Press the key a second time for the same text and you hear a
+single low tone instead: that press is ignored.
 
 ### Linux (GNOME)
 
@@ -611,7 +620,8 @@ add() {  # add <key> <command> <binding> <name>
 PATHS=$(
   add pakize-read  "pakize speak --clipboard" '<Super>s'        'Pakize: read clipboard'
   add pakize-pause "pakize pause"             '<Super>space'    'Pakize: pause'
-  add pakize-stop  "pakize stop"              '<Shift><Super>d' 'Pakize: stop'
+  add pakize-stop  "pakize stop"              '<Shift><Super>d' 'Pakize: skip'
+  add pakize-stop-all "pakize stop --all"     '<Control><Shift><Super>d' 'Pakize: stop all'
   add pakize-dictate "pakize dictate"         '<Super>w'        'Pakize: dictate'
 )
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
@@ -663,7 +673,7 @@ $HOME/.local/bin/pakize speak --clipboard
 ```
 
 4. Save it as `Pakize: read clipboard`; repeat for `pakize pause`,
-   `pakize stop` and `pakize dictate`.
+   `pakize stop`, `pakize stop --all` and `pakize dictate`.
 5. **System Settings → Keyboard → Keyboard Shortcuts → Services → General** —
    assign keys next to the Quick Actions.
 
@@ -678,6 +688,7 @@ If you want something lighter, a few lines in a single
 alt + cmd - s : $HOME/.local/bin/pakize speak --clipboard
 alt + cmd - space : $HOME/.local/bin/pakize pause
 shift + alt + cmd - d : $HOME/.local/bin/pakize stop
+ctrl + shift + alt + cmd - d : $HOME/.local/bin/pakize stop --all
 alt + cmd - w : $HOME/.local/bin/pakize dictate
 ```
 
@@ -696,7 +707,7 @@ The built-in route is a shortcut file (`.lnk`); no extra software needed.
 3. Save it as `Pakize: read clipboard`.
 4. **Right-click the shortcut → Properties → Shortcut key**, click the field and
    press the key combination (e.g. `Ctrl+Alt+S`).
-5. Repeat for `pause`, `stop` and `dictate`.
+5. Repeat for `pause`, `stop`, `stop --all` and `dictate`.
 
 > With this method a console window flashes on every press. If that bothers you,
 > set **Run** to *Minimized*, or use
@@ -707,6 +718,7 @@ The built-in route is a shortcut file (`.lnk`); no extra software needed.
 #s::Run('pakize.exe speak --clipboard', , 'Hide')
 #Space::Run('pakize.exe pause', , 'Hide')
 +#d::Run('pakize.exe stop', , 'Hide')
+^+#d::Run('pakize.exe stop --all', , 'Hide')
 #w::Run('pakize.exe dictate', , 'Hide')
 ```
 
@@ -737,12 +749,12 @@ it, add `--session /path/session.jsonl` to the command.
 
 These commands also manage playback you started with `pakize replay`.
 
-If several narrations are playing at once (you started them from two different
-terminals) both are managed — `stop` stops all of them, `pause` pauses all of
-them:
+If you start several narrations (from two different terminals, or by pressing
+the key repeatedly) they queue up and play one at a time. `stop` and `pause`
+act on the one playing; `stop --all` also ends the ones waiting:
 
 ```
-$ pakize stop
+$ pakize stop --all
 Durduruldu. (2 seslendirme)      ← "Stopped. (2 narrations)"
 ```
 
