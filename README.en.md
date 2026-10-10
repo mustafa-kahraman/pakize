@@ -18,7 +18,7 @@ tables, links and formatting marks according to a policy you control.
 - **Sources** — file, clipboard, stdin, or a Claude Code session transcript
 - **Books** — narrates EPUB/PDF/MOBI chapter by chapter, resumes if interrupted
 - **Translation** — translates to a target language before speaking
-- **Engines** — edge-tts (online, high quality), falls back to Piper when offline; EMA for fully local Turkish
+- **Engines** — edge-tts (online, high quality), falls back to Piper when offline; EMA or antalia for fully local Turkish
 - **Control** — read, pause and stop from a keyboard shortcut
 - **Dictation** — speak, press a key, the text is on your clipboard; local model, no network
 - **Platforms** — Linux, macOS and Windows
@@ -36,8 +36,9 @@ tables, links and formatting marks according to a policy you control.
 > of those companies do not contemplate third-party use. This tool is intended
 > for personal use; evaluating it for commercial or heavy use is on you. For a
 > fully local alternative that needs no network, see
-> [Offline fallback: Piper](#offline-fallback-piper) and
-> [Offline Turkish engine: EMA Lightning](#offline-turkish-engine-ema-lightning).
+> [Offline fallback: Piper](#offline-fallback-piper),
+> [Offline Turkish engine: EMA Lightning](#offline-turkish-engine-ema-lightning) and
+> [Offline Turkish engine: antalia-mini](#offline-turkish-engine-antalia-mini).
 
 ## Installation
 
@@ -171,6 +172,7 @@ corresponding feature:
 | clipboard tool | `--clipboard` | `sudo apt install xclip` | ships with the OS (`pbpaste`) | ships with the OS (PowerShell) |
 | `piper` | offline fallback engine | `uv tool install piper-tts` | same | same |
 | EMA environment | offline Turkish engine `ema` | see [EMA](#offline-turkish-engine-ema-lightning) | same | same |
+| antalia environment | offline Turkish engine `antalia` | see [antalia](#offline-turkish-engine-antalia-mini) | same | same |
 
 When Pakize runs into a missing tool it prints the install command **for the
 platform you are on**; you can run the command from the error message as-is.
@@ -985,6 +987,52 @@ revision**, their **sha256** is verified, and they are always loaded in
 internal functions, the installed version must be exactly 1.0.1; with any other
 version Pakize refuses to load and prints the install command.
 
+## Offline Turkish engine: antalia-mini
+
+[antalia-mini](https://huggingface.co/cloud0day3/antalia-mini) is the second
+offline Turkish engine next to EMA: a 7.6-million-parameter, single-voice model
+that runs on the CPU, with 48 kHz output. Licensed under Apache-2.0. Everything
+in the EMA section applies as-is: a separate Python environment, one worker
+process per run, shut down on success, on error and on Ctrl+C.
+
+Installation is three commands (on Windows, write an explicit path instead of
+`~`). The package is not on PyPI; the wheel of the pinned release is installed
+straight from Hugging Face:
+
+```bash
+uv venv --python 3.12 ~/.local/share/pakize-antalia
+uv pip install --python ~/.local/share/pakize-antalia torch --index https://download.pytorch.org/whl/cpu
+uv pip install --python ~/.local/share/pakize-antalia "antalia-mini @ https://huggingface.co/cloud0day3/antalia-mini/resolve/1e8166a7436f3e11f7f03b339258ec30f366db60/antalia_mini-1.0.0-py3-none-any.whl"
+```
+
+Then put the interpreter's path into the config:
+
+```toml
+engine = "antalia"
+antalia_python = "~/.local/share/pakize-antalia/bin/python"   # Windows: ~/.local/share/pakize-antalia/Scripts/python.exe
+```
+
+To use it only as the fallback, set `fallback_engine = "antalia"`; for a single
+run, pass `--engine antalia`. The defaults do not change: `edge` primary,
+`piper` fallback; EMA stays as it is.
+
+Speed comes from the same `rate` field: 1.0 uses the model's own default
+speed, any other value multiplies that default (1.2 = 20% faster). The output
+is shaped like EMA's — normalized to a peak of 0.95 and multiplied by `volume`,
+with a short fade-out and 0.85 s of silence appended to each chunk — and
+written as 48 kHz mono WAV; if the target is `.mp3` it is converted during
+concatenation. Unlike EMA, apostrophes are **kept**: antalia resolves
+expressions such as `EMA'nın` itself. `pitch_hz` has no effect here either. On
+first use the model files are downloaded (about 30 MB); after that it is
+offline.
+
+**Security note.** The weights are safetensors only; there is no pickle at
+inference time and the only network destination is huggingface.co. Pakize
+opens the model at a **pinned revision** and verifies the **sha256** of both
+weight files against its own constants; on a mismatch the engine does not
+start. The installed package version must be exactly 1.0.0; with any other
+version Pakize refuses to load and prints the install command.
+
 ## Decimal numbers
 
 In Turkish the decimal separator is a comma. Written as `1.15`, it is read
@@ -1023,7 +1071,7 @@ text
   → parsing/markdown.py   block detection (code, table, heading, list, quote)
   → parsing/policy.py     read/announce/skip per type + inline normalization
   → chunking.py           packing at sentence boundaries, up to a character limit
-  → engines/              TTS adapters (edge, piper, ema; ema runs a worker in a separate env)
+  → engines/              TTS adapters (edge, piper, ema, antalia; the last two run a worker in a separate env)
   → audio.py              concatenation and playback via ffmpeg
 ```
 

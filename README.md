@@ -18,7 +18,7 @@ işaretlerini de politikaya göre eler.
 - **Kaynaklar** — dosya, pano, stdin ya da Claude Code oturum kaydı
 - **Kitap** — EPUB/PDF/MOBI'yi bölüm bölüm seslendirir, yarıda kalırsa devam eder
 - **Çeviri** — seslendirmeden önce hedef dile çevirir
-- **Motorlar** — edge-tts (çevrimiçi, kaliteli), ağ yoksa Piper'a düşer; tamamen yerel Türkçe için EMA
+- **Motorlar** — edge-tts (çevrimiçi, kaliteli), ağ yoksa Piper'a düşer; tamamen yerel Türkçe için EMA ya da antalia
 - **Denetim** — klavye kısayoluyla oku, duraklat, durdur
 - **Dikte** — konuş, tuşa bas, metin panoda; tanıma yerel modelle, ağ gerekmez
 - **Platformlar** — Linux, macOS ve Windows
@@ -30,8 +30,8 @@ işaretlerini de politikaya göre eler.
 > şirketlerin kullanım şartları üçüncü taraf kullanımını öngörmez. Kişisel
 > kullanım için düşünülmüştür; ticari ya da yoğun kullanım öncesinde bunu
 > değerlendirmek sana düşer. Ağ gerektirmeyen tam yerel bir alternatif için
-> [Piper](#çevrimdışı-yedek-piper) ve [EMA](#çevrimdışı-türkçe-motor-ema-lightning)
-> bölümlerine bak.
+> [Piper](#çevrimdışı-yedek-piper), [EMA](#çevrimdışı-türkçe-motor-ema-lightning)
+> ve [antalia](#çevrimdışı-türkçe-motor-antalia-mini) bölümlerine bak.
 
 ## Kurulum
 
@@ -165,6 +165,7 @@ karşılarındaki aracı da kur:
 | pano aracı | `--clipboard` | `sudo apt install xclip` | sistemle gelir (`pbpaste`) | sistemle gelir (PowerShell) |
 | `piper` | çevrimdışı yedek motor | `uv tool install piper-tts` | aynı | aynı |
 | EMA ortamı | çevrimdışı Türkçe motor `ema` | bkz. [EMA](#çevrimdışı-türkçe-motor-ema-lightning) | aynı | aynı |
+| antalia ortamı | çevrimdışı Türkçe motor `antalia` | bkz. [antalia](#çevrimdışı-türkçe-motor-antalia-mini) | aynı | aynı |
 
 Pakize eksik bir araçla karşılaştığında **bulunduğun platformun** kurulum
 komutunu söyler; hata mesajındaki komutu olduğu gibi çalıştırabilirsin.
@@ -955,6 +956,50 @@ ve her zaman **güvenli kipte** (`weights_only=True`) yüklenir. Bu yol paketin 
 fonksiyonlarına dayandığı için kurulu sürüm tam olarak 1.0.1 olmalı; başka
 sürümde Pakize yüklemeyi reddeder ve kurulum komutunu söyler.
 
+## Çevrimdışı Türkçe motor: antalia-mini
+
+[antalia-mini](https://huggingface.co/cloud0day3/antalia-mini), EMA'nın yanında
+ikinci çevrimdışı Türkçe motordur: 7,6 milyon parametrelik, tek sesli, CPU'da
+çalışan bir model; çıkışı 48 kHz. Lisansı Apache-2.0. EMA bölümündeki düzen
+olduğu gibi geçerlidir: ayrı bir Python ortamı, iş başına tek işçi süreç,
+başarıda, hatada ve Ctrl+C'de kapanış.
+
+Kurulum üç komut (Windows'ta `~` yerine açık bir yol yaz). Paket PyPI'da
+değil; sabit sürümdeki wheel doğrudan Hugging Face'ten kurulur:
+
+```bash
+uv venv --python 3.12 ~/.local/share/pakize-antalia
+uv pip install --python ~/.local/share/pakize-antalia torch --index https://download.pytorch.org/whl/cpu
+uv pip install --python ~/.local/share/pakize-antalia "antalia-mini @ https://huggingface.co/cloud0day3/antalia-mini/resolve/1e8166a7436f3e11f7f03b339258ec30f366db60/antalia_mini-1.0.0-py3-none-any.whl"
+```
+
+Sonra config'e yorumlayıcının yolunu yaz:
+
+```toml
+engine = "antalia"
+antalia_python = "~/.local/share/pakize-antalia/bin/python"   # Windows: ~/.local/share/pakize-antalia/Scripts/python.exe
+```
+
+Yalnızca yedek olarak kullanmak için `fallback_engine = "antalia"`, tek
+seferlik için `--engine antalia`. Varsayılanlar değişmez: `edge` birincil,
+`piper` yedek; EMA da olduğu gibi durur.
+
+Hız aynı `rate` alanından gelir: 1.0 modelin kendi varsayılan hızını kullanır,
+başka bir değer o varsayılanı çarpar (1.2 = %20 hızlı). Çıktı EMA'daki gibi
+biçimlenir — tepe 0.95'e normalize edilip `volume` ile çarpılır, parça sonuna
+kısa bir sönüm ve 0,85 sn sessizlik eklenir — ve 48 kHz mono WAV olarak
+yazılır; hedef `.mp3` ise birleştirmede dönüştürülür. EMA'dan farklı olarak
+kesme işaretleri **silinmez**: antalia `EMA'nın` gibi ifadeleri kendisi
+çözüyor. `pitch_hz` burada da etkisizdir. İlk kullanımda model dosyaları
+indirilir (yaklaşık 30 MB); sonrası çevrimdışıdır.
+
+**Güvenlik notu.** Ağırlıklar yalnız safetensors biçimindedir; çıkarımda pickle
+yoktur ve ağ yalnız huggingface.co'ya çıkar. Pakize modeli **sabit bir
+revizyondan** açar ve iki ağırlık dosyasının **sha256**'sını kendi
+sabitleriyle doğrular; uyuşmazsa motor başlamaz. Kurulu paket sürümü tam olarak
+1.0.0 olmalı; başka sürümde Pakize yüklemeyi reddeder ve kurulum komutunu
+söyler.
+
 ## Ondalık sayılar
 
 Türkçe'de ondalık ayracı virgüldür. `1.15` yazımı TTS motoruna Türkçe
@@ -988,7 +1033,7 @@ metin
   → parsing/markdown.py   blok tespiti (kod, tablo, başlık, liste, alıntı)
   → parsing/policy.py     her tipe oku/anons/atla + satır içi normalizasyon
   → chunking.py           cümle sınırında, karakter limitine göre paketleme
-  → engines/              TTS adaptörleri (edge, piper, ema; ema ayrı ortamda işçi süreç)
+  → engines/              TTS adaptörleri (edge, piper, ema, antalia; son ikisi ayrı ortamda işçi süreç)
   → audio.py              ffmpeg ile birleştirme ve çalma
 ```
 
