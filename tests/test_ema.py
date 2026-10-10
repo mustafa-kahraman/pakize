@@ -18,6 +18,7 @@ from pakize import pipeline
 from pakize.config import Config
 from pakize.engines import EngineError, EngineUnavailable, create_engine
 from pakize.engines import ema as ema_modulu
+from pakize.engines import worker as isci_modulu
 from pakize.engines.base import TtsEngine
 from pakize.engines.ema import EmaEngine
 
@@ -307,8 +308,8 @@ def test_isci_ust_surec_olunce_kapanacak_sekilde_baslatilir(config, kurulum, tmp
         kayit["kwargs"] = kwargs
         raise OSError("kayıt alındı, süreç açılmadı")
 
-    monkeypatch.setattr(ema_modulu, "die_with_parent", lambda: isaret)
-    monkeypatch.setattr(ema_modulu.asyncio, "create_subprocess_exec", kaydeden_exec)
+    monkeypatch.setattr(isci_modulu, "die_with_parent", lambda: isaret)
+    monkeypatch.setattr(isci_modulu.asyncio, "create_subprocess_exec", kaydeden_exec)
     engine = _motor(config, kurulum)
 
     with pytest.raises(EngineUnavailable, match="süreç açılmadı"):
@@ -321,9 +322,9 @@ def test_isci_ust_surec_olunce_kapanacak_sekilde_baslatilir(config, kurulum, tmp
 
 def test_yanit_gecikirse_isci_kapatilir_ve_hata_verilir(config, kurulum, tmp_path, monkeypatch):
     """Takılan işçi Pakize'yi sonsuza dek bekletmemeli."""
-    monkeypatch.setattr(ema_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
-    monkeypatch.setattr(ema_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
-    monkeypatch.setattr(ema_modulu, "STOP_GRACE_SECONDS", 0.2)
+    monkeypatch.setattr(isci_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
+    monkeypatch.setattr(isci_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
+    monkeypatch.setattr(isci_modulu, "STOP_GRACE_SECONDS", 0.2)
     engine = _motor(config, kurulum)
 
     async def senaryo():
@@ -345,9 +346,9 @@ def test_zaman_asimi_hatasi_kibar_kapanisi_beklemez(config, kurulum, tmp_path, m
     """Takılmış işçi stdin'i okumaz; hata STOP_GRACE_SECONDS kadar gecikmemeli."""
     import time
 
-    monkeypatch.setattr(ema_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
-    monkeypatch.setattr(ema_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
-    monkeypatch.setattr(ema_modulu, "STOP_GRACE_SECONDS", 30.0)
+    monkeypatch.setattr(isci_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
+    monkeypatch.setattr(isci_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
+    monkeypatch.setattr(isci_modulu, "STOP_GRACE_SECONDS", 30.0)
     engine = _motor(config, kurulum)
 
     async def senaryo():
@@ -362,8 +363,8 @@ def test_zaman_asimi_hatasi_kibar_kapanisi_beklemez(config, kurulum, tmp_path, m
 
 
 def test_zaman_asimi_mesajina_stderr_kuyrugu_eklenir(config, kurulum, tmp_path, monkeypatch):
-    monkeypatch.setattr(ema_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
-    monkeypatch.setattr(ema_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
+    monkeypatch.setattr(isci_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
+    monkeypatch.setattr(isci_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
     engine = _motor(config, kurulum)
 
     with pytest.raises(EngineError, match="yanıt vermedi") as hata:
@@ -373,9 +374,9 @@ def test_zaman_asimi_mesajina_stderr_kuyrugu_eklenir(config, kurulum, tmp_path, 
 
 
 def test_yanit_zaman_asimi_isci_surecini_oldurur(config, kurulum, tmp_path, monkeypatch):
-    monkeypatch.setattr(ema_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
-    monkeypatch.setattr(ema_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
-    monkeypatch.setattr(ema_modulu, "STOP_GRACE_SECONDS", 0.2)
+    monkeypatch.setattr(isci_modulu, "REQUEST_TIMEOUT_BASE", 0.3)
+    monkeypatch.setattr(isci_modulu, "REQUEST_SECONDS_PER_CHAR", 0.0)
+    monkeypatch.setattr(isci_modulu, "STOP_GRACE_SECONDS", 0.2)
     engine = _motor(config, kurulum)
     surecler: list = []
 
@@ -392,8 +393,8 @@ def test_yanit_zaman_asimi_isci_surecini_oldurur(config, kurulum, tmp_path, monk
 
 
 def test_yanit_suresi_parca_uzunluguyla_buyur():
-    assert ema_modulu.request_timeout("") == pytest.approx(60.0)
-    assert ema_modulu.request_timeout("x" * 2500) == pytest.approx(310.0)
+    assert isci_modulu.request_timeout("") == pytest.approx(60.0)
+    assert isci_modulu.request_timeout("x" * 2500) == pytest.approx(310.0)
 
 
 def test_acilis_hatasi_tekrar_isci_acmaz(config, kurulum, tmp_path):
@@ -519,7 +520,7 @@ def test_iptal_edilince_isci_kapanir(config, kurulum, motorlar, tmp_path):
 
 def test_kapanis_bekleyen_isciyi_oldurur(config, kurulum, tmp_path, monkeypatch):
     """stdin kapanınca çıkmayan işçi, süre dolunca öldürülür."""
-    monkeypatch.setattr(ema_modulu, "STOP_GRACE_SECONDS", 0.2)
+    monkeypatch.setattr(isci_modulu, "STOP_GRACE_SECONDS", 0.2)
     engine = _motor(config, kurulum)
 
     async def senaryo():

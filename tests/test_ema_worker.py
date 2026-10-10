@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from pakize.engines import ema_worker as isci
+from pakize.engines import worker_audio as ses
 
 
 # --- sürüm denetimi -----------------------------------------------------------
@@ -134,28 +135,28 @@ def test_indirme_hatasi_sarilir():
 
 
 def test_tepe_hedefe_cekilir():
-    assert isci.gain_for(0.5, 1.0) == pytest.approx(1.9)
-    assert isci.normalize([0.5, -0.25], 1.0) == pytest.approx([0.95, -0.475])
+    assert ses.gain_for(0.5, 1.0) == pytest.approx(1.9)
+    assert ses.normalize([0.5, -0.25], 1.0) == pytest.approx([0.95, -0.475])
 
 
 def test_volume_ile_carpilir():
-    assert isci.normalize([0.5], 0.5) == pytest.approx([0.475])
+    assert ses.normalize([0.5], 0.5) == pytest.approx([0.475])
 
 
 def test_asan_degerler_kirpilir():
-    sonuc = isci.normalize([0.5, -0.5], 2.0)
+    sonuc = ses.normalize([0.5, -0.5], 2.0)
 
     assert sonuc == [1.0, -1.0]
 
 
 def test_sessiz_parcada_sifira_bolme_olmaz():
-    assert isci.gain_for(0.0, 1.0) == 0.0
-    assert isci.normalize([0.0, 0.0], 1.0) == [0.0, 0.0]
-    assert isci.normalize([], 1.0) == []
+    assert ses.gain_for(0.0, 1.0) == 0.0
+    assert ses.normalize([0.0, 0.0], 1.0) == [0.0, 0.0]
+    assert ses.normalize([], 1.0) == []
 
 
 def test_pcm16_donusumu():
-    assert isci.to_pcm16([0.0, 1.0, -1.0]) == b"\x00\x00\xff\x7f\x01\x80"
+    assert ses.to_pcm16([0.0, 1.0, -1.0]) == b"\x00\x00\xff\x7f\x01\x80"
 
 
 def _ornekler(pcm: bytes) -> list[int]:
@@ -163,13 +164,13 @@ def _ornekler(pcm: bytes) -> list[int]:
 
 
 def test_render_pcm_numpysiz_calisir():
-    pcm = isci.render_pcm([0.5, -0.5], 1.0)
+    pcm = ses.render_pcm([0.5, -0.5], 1.0)
 
     # Son 15 ms sönümlenir: iki örneklik parçada ilki yarıya iner, ikincisi sıfırlanır;
     # ardından TAIL_SILENCE_SECONDS kadar sessizlik gelir.
     ornekler = _ornekler(pcm)
     assert ornekler[:2] == [round(0.95 * 0.5 * 32767), 0]
-    assert len(ornekler) == 2 + isci.tail_silence_count()
+    assert len(ornekler) == 2 + ses.tail_silence_count()
 
 
 class SahteDizi:
@@ -228,21 +229,21 @@ UZUN = 3000
 
 
 def test_numpy_yolu_volume_ile_carpar(sahte_numpy):
-    assert _ornekler(isci.render_pcm([0.5] * UZUN, 0.5))[0] == round(0.475 * 32767)
-    assert _ornekler(isci.render_pcm([0.5, -0.25] * UZUN, 1.0))[:2] == [
+    assert _ornekler(ses.render_pcm([0.5] * UZUN, 0.5))[0] == round(0.475 * 32767)
+    assert _ornekler(ses.render_pcm([0.5, -0.25] * UZUN, 1.0))[:2] == [
         round(0.95 * 32767),
         round(-0.475 * 32767),
     ]
 
 
 def test_numpy_yolu_asan_degerleri_kirpar(sahte_numpy):
-    assert _ornekler(isci.render_pcm([0.5, -0.5] * UZUN, 2.0))[:2] == [32767, -32767]
+    assert _ornekler(ses.render_pcm([0.5, -0.5] * UZUN, 2.0))[:2] == [32767, -32767]
 
 
 def test_numpy_yolu_sessiz_parcada_sifira_bolmez(sahte_numpy):
-    sessiz = isci.tail_silence_count()
-    assert _ornekler(isci.render_pcm([0.0, 0.0], 1.0)) == [0] * (2 + sessiz)
-    assert _ornekler(isci.render_pcm([], 1.0)) == [0] * sessiz
+    sessiz = ses.tail_silence_count()
+    assert _ornekler(ses.render_pcm([0.0, 0.0], 1.0)) == [0] * (2 + sessiz)
+    assert _ornekler(ses.render_pcm([], 1.0)) == [0] * sessiz
 
 
 def test_torch_tensoru_numpy_dizisine_cevrilir(sahte_numpy):
@@ -256,7 +257,7 @@ def test_torch_tensoru_numpy_dizisine_cevrilir(sahte_numpy):
         def numpy(self):
             return [0.5]
 
-    assert _ornekler(isci.render_pcm(SahteTensor(), 1.0))[0] == 0  # tek örnek: sönüm sıfırlar
+    assert _ornekler(ses.render_pcm(SahteTensor(), 1.0))[0] == 0  # tek örnek: sönüm sıfırlar
 
 
 # --- parça sonu: sönüm ve sessizlik -------------------------------------------
@@ -264,10 +265,10 @@ def test_torch_tensoru_numpy_dizisine_cevrilir(sahte_numpy):
 
 def _parca_sonu_dogrula(ornekler: list[int], orijinal_uzunluk: int) -> None:
     """Üç koruma: kuyruk tam sessizlik, tekdüze sönüm ve sıfırda biten ses, uzunluk."""
-    sessiz = isci.tail_silence_count()
-    sonum = int(round(isci.FADE_OUT_SECONDS * isci.SAMPLE_RATE))
-    assert sessiz == round(isci.TAIL_SILENCE_SECONDS * isci.SAMPLE_RATE)
-    assert sonum == round(isci.FADE_OUT_SECONDS * isci.SAMPLE_RATE)
+    sessiz = ses.tail_silence_count()
+    sonum = int(round(ses.FADE_OUT_SECONDS * ses.SAMPLE_RATE))
+    assert sessiz == round(ses.TAIL_SILENCE_SECONDS * ses.SAMPLE_RATE)
+    assert sonum == round(ses.FADE_OUT_SECONDS * ses.SAMPLE_RATE)
 
     assert len(ornekler) == orijinal_uzunluk + sessiz
     assert ornekler[-sessiz:] == [0] * sessiz, "kuyruk tam sıfır olmalı"
@@ -281,63 +282,63 @@ def _parca_sonu_dogrula(ornekler: list[int], orijinal_uzunluk: int) -> None:
 
 
 def test_saf_python_yolu_parca_sonunu_bicimler():
-    ornekler = _ornekler(isci.render_pcm([0.5] * UZUN, 1.0))
+    ornekler = _ornekler(ses.render_pcm([0.5] * UZUN, 1.0))
 
     _parca_sonu_dogrula(ornekler, UZUN)
 
 
 def test_numpy_yolu_parca_sonunu_bicimler(sahte_numpy):
-    ornekler = _ornekler(isci.render_pcm([0.5] * UZUN, 1.0))
+    ornekler = _ornekler(ses.render_pcm([0.5] * UZUN, 1.0))
 
     _parca_sonu_dogrula(ornekler, UZUN)
 
 
 @pytest.mark.parametrize("uzunluk", [0, 1, 10, 719])
 def test_sonumden_kisa_parca_cokmez(uzunluk):
-    ornekler = _ornekler(isci.render_pcm([0.5] * uzunluk, 1.0))
+    ornekler = _ornekler(ses.render_pcm([0.5] * uzunluk, 1.0))
 
-    assert len(ornekler) == uzunluk + isci.tail_silence_count()
+    assert len(ornekler) == uzunluk + ses.tail_silence_count()
     if uzunluk:
         assert ornekler[uzunluk - 1] == 0
-    assert ornekler[uzunluk:] == [0] * isci.tail_silence_count()
+    assert ornekler[uzunluk:] == [0] * ses.tail_silence_count()
 
 
 @pytest.mark.parametrize("uzunluk", [0, 1, 10, 719])
 def test_sonumden_kisa_parca_numpy_yolunda_cokmez(sahte_numpy, uzunluk):
-    ornekler = _ornekler(isci.render_pcm([0.5] * uzunluk, 1.0))
+    ornekler = _ornekler(ses.render_pcm([0.5] * uzunluk, 1.0))
 
-    assert len(ornekler) == uzunluk + isci.tail_silence_count()
+    assert len(ornekler) == uzunluk + ses.tail_silence_count()
 
 
 def test_kuyruk_sessizligi_edge_kuyrugu_kadar_ve_tam_ornek():
     """Dinleme testi 0.85 sn'de karar kıldı; 48 kHz'de bu tam 40800 örnek, yuvarlama payı yok."""
-    assert isci.TAIL_SILENCE_SECONDS == 0.85
-    assert isci.FADE_OUT_SECONDS == 0.015
-    assert isci.tail_silence_count() == 40800
-    assert isci.tail_silence_count(24000) == 20400
+    assert ses.TAIL_SILENCE_SECONDS == 0.85
+    assert ses.FADE_OUT_SECONDS == 0.015
+    assert ses.tail_silence_count() == 40800
+    assert ses.tail_silence_count(24000) == 20400
 
 
 def test_sonum_carpanlari_birden_sifira_iner():
-    gains = isci.fade_out_gains(UZUN)
+    gains = ses.fade_out_gains(UZUN)
 
     assert len(gains) == 720
     assert gains[0] == pytest.approx(1.0, abs=0.01)
     assert gains[-1] == 0.0
     assert all(a > b for a, b in zip(gains, gains[1:]))
-    assert isci.fade_out_gains(5) and len(isci.fade_out_gains(5)) == 5
-    assert isci.fade_out_gains(0) == []
+    assert ses.fade_out_gains(5) and len(ses.fade_out_gains(5)) == 5
+    assert ses.fade_out_gains(0) == []
 
 
 def test_sessiz_parcada_son_bicimleme_de_sessiz_kalir():
-    ornekler = _ornekler(isci.render_pcm([0.0] * UZUN, 1.0))
+    ornekler = _ornekler(ses.render_pcm([0.0] * UZUN, 1.0))
 
-    assert ornekler == [0] * (UZUN + isci.tail_silence_count())
+    assert ornekler == [0] * (UZUN + ses.tail_silence_count())
 
 
 def test_wav_48khz_mono_16bit(tmp_path):
     hedef = tmp_path / "parca.wav"
 
-    isci.write_wav(hedef, isci.to_pcm16([0.1, 0.2, 0.3]))
+    ses.write_wav(hedef, ses.to_pcm16([0.1, 0.2, 0.3]))
 
     with wave.open(str(hedef), "rb") as okuyucu:
         assert okuyucu.getframerate() == 48000
@@ -508,10 +509,10 @@ def test_istek_seslendirilir_ve_wav_yazilir(tmp_path):
     ]
     with wave.open(str(hedef), "rb") as okuyucu:
         assert okuyucu.getframerate() == 48000
-        assert okuyucu.getnframes() == 3 + isci.tail_silence_count()
+        assert okuyucu.getnframes() == 3 + ses.tail_silence_count()
         # Üç örneklik parça baştan sona sönüm penceresinde: 0.95·g0, -0.475·g1, 0.
-        beklenen = isci.shape_tail([0.95, -0.475, 0.0])[:3]
-        assert okuyucu.readframes(3) == isci.to_pcm16(beklenen)
+        beklenen = ses.shape_tail([0.95, -0.475, 0.0])[:3]
+        assert okuyucu.readframes(3) == ses.to_pcm16(beklenen)
 
 
 def test_sentez_hatasi_yanit_olarak_doner_isci_yasar(tmp_path):
@@ -621,8 +622,8 @@ def test_gercek_isci_gurultuyu_protokol_akisina_karistirmaz(tmp_path):
     ):
         assert gurultu in stderr
     with wave.open(str(hedef), "rb") as okuyucu:
-        assert okuyucu.getnframes() == 2 + isci.tail_silence_count()
-        assert okuyucu.readframes(2) == isci.to_pcm16(isci.shape_tail([0.95, -0.95])[:2])
+        assert okuyucu.getnframes() == 2 + ses.tail_silence_count()
+        assert okuyucu.readframes(2) == ses.to_pcm16(ses.shape_tail([0.95, -0.95])[:2])
 
 
 def test_gercek_isci_acilis_hatasini_protokolle_bildirir(tmp_path):

@@ -403,19 +403,8 @@ _EN: dict[str, str] = {
         "  {install}\n"
         "then put the interpreter's path in the config:\n"
         '  ema_python = "{example}"',
-    "ema_python ile gösterilen Python yok: {path}":
-        "the Python pointed to by ema_python is missing: {path}",
-    "ema seslendirme başarısız: {error}": "ema synthesis failed: {error}",
-    "ema boş ses dosyası üretti": "ema produced an empty audio file",
     "rate {rate} EMA için geçersiz; {low} ile {high} arasında olmalı":
         "rate {rate} is invalid for EMA; it must be between {low} and {high}",
-    "EMA işçisi başlatılamadı: {error}": "the EMA worker could not be started: {error}",
-    "EMA işçisi {seconds:.0f} sn içinde hazır olmadı.":
-        "the EMA worker was not ready within {seconds:.0f} s.",
-    "EMA işçisi açılırken kapandı (çıkış kodu {code}).":
-        "the EMA worker exited while starting (exit code {code}).",
-    "EMA işçisi seslendirme sırasında kapandı (çıkış kodu {code}).":
-        "the EMA worker exited during synthesis (exit code {code}).",
     "EMA ortamında ({python}) gerekli paketler yok: {error}\n"
     "Ayrı bir ortam açıp paketleri oraya kur:\n"
     "  {venv}\n"
@@ -428,19 +417,32 @@ _EN: dict[str, str] = {
         "  {install}\n"
         "then put the interpreter's path in the config:\n"
         '  ema_python = "{example}"',
-    "EMA işçisi {seconds:.0f} sn içinde yanıt vermedi; kapatıldı.":
-        "the EMA worker did not answer within {seconds:.0f} s; it was shut down.",
     "ema-lightning {installed} kurulu; güvenli yükleme için tam olarak "
     "{required} gerekli. Kurmak için:\n  {install}":
         "ema-lightning {installed} is installed; safe loading needs exactly "
         "{required}. To install it:\n  {install}",
-    "EMA model dosyaları indirilemedi (ilk kullanımda ağ gerekir): {error}":
-        "the EMA model files could not be downloaded (first use needs network): {error}",
-    "EMA model dosyası beklenen sha256 ile uyuşmuyor: {file}. "
+    # --- işçi süreçli motorların ortak mesajları (EMA, antalia) ---
+    "{key} ile gösterilen Python yok: {path}":
+        "the Python pointed to by {key} is missing: {path}",
+    "{engine} seslendirme başarısız: {error}": "{engine} synthesis failed: {error}",
+    "{engine} boş ses dosyası üretti": "{engine} produced an empty audio file",
+    "{engine} işçisi başlatılamadı: {error}":
+        "the {engine} worker could not be started: {error}",
+    "{engine} işçisi {seconds:.0f} sn içinde hazır olmadı.":
+        "the {engine} worker was not ready within {seconds:.0f} s.",
+    "{engine} işçisi açılırken kapandı (çıkış kodu {code}).":
+        "the {engine} worker exited while starting (exit code {code}).",
+    "{engine} işçisi seslendirme sırasında kapandı (çıkış kodu {code}).":
+        "the {engine} worker exited during synthesis (exit code {code}).",
+    "{engine} işçisi {seconds:.0f} sn içinde yanıt vermedi; kapatıldı.":
+        "the {engine} worker did not answer within {seconds:.0f} s; it was shut down.",
+    "{engine} model dosyaları indirilemedi (ilk kullanımda ağ gerekir): {error}":
+        "the {engine} model files could not be downloaded (first use needs network): {error}",
+    "{engine} model dosyası beklenen sha256 ile uyuşmuyor: {file}. "
     "Dosya değişmiş olabilir; model yüklenmedi.":
-        "an EMA model file does not match the expected sha256: {file}. "
+        "a {engine} model file does not match the expected sha256: {file}. "
         "The file may have changed; the model was not loaded.",
-    "EMA modeli yüklenemedi: {error}": "the EMA model could not be loaded: {error}",
+    "{engine} modeli yüklenemedi: {error}": "the {engine} model could not be loaded: {error}",
     "Birleştirilecek ses parçası yok": "No audio chunks to concatenate",
     "ffplay hata verdi (kod {code}): {error}":
         "ffplay failed (code {code}): {error}",
