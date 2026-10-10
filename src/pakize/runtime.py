@@ -8,10 +8,11 @@ Kayıt aynı zamanda bir kuyruktur: her çalacak süreç sıraya girer ve kendin
 eski yaşayan kayıt kalmayana kadar bekler; böylece iki Pakize asla üst üste
 çalmaz. Sıra, kayda yazılan zaman damgasıyla belirlenir (eşitlikte küçük
 süreç numarası önde); dosya değişiklik zamanı dosya sistemine göre kaba
-olabildiği için kullanılmaz. Sıranın başı çalmaya ancak tek bir kilit
-dosyasını (`O_EXCL`) oluşturabilince başlar: kayıt, damgası alındıktan sonra
-görünür olduğu için sıra tek başına üst üste çalmayı engelleyemiyordu. POSIX
-kilidi kullanılmaz; `O_EXCL` Windows'ta da çalışır.
+olabildiği için kullanılmaz. Damga, kısa bir kayıt kilidi (`O_EXCL` ile açılan
+tek dosya) altında alınır ve kayıt aynı kilit altında görünür kılınır; böylece
+damga sırası görünürlük sırasına eşittir ve kendini sıranın başı sanan yeni bir
+kayıt eskisinin üstüne çalamaz. Kilit yalnız milisaniyeler tutulur, çalma
+boyunca değil. POSIX kilidi kullanılmaz; `O_EXCL` Windows'ta da çalışır.
 
 Kayıt yalnızca bir ipucudur: süreç kimlikleri yeniden kullanılabildiği için
 okurken sürecin gerçekten Pakize olduğu doğrulanır.
@@ -47,8 +48,20 @@ PLAYER_COMM = "ffplay"
 QUEUE_POLL_SECONDS = 0.2
 """Sıranın gelip gelmediğine bakma aralığı; sıradaki en çok bu kadar geç başlar."""
 
-LOCK_NAME = "playing.lock"
-"""Çalma kilidi dosyası; içinde kilidi tutan sürecin numarası yazar."""
+REGISTRATION_LOCK_NAME = "queue.lock"
+"""Kayıt kilidi dosyası; yalnız kayda girerken, milisaniyeler boyunca tutulur."""
+
+LOCK_POLL_SECONDS = 0.01
+"""Başkasının tuttuğu kayıt kilidine yeniden bakma aralığı."""
+
+LOCK_STALE_SECONDS = 2.0
+"""Bu yaştan eski kayıt kilidi bayattır ve kaldırılır.
+
+Kilit yalnız bir zaman damgası alıp bir dosya yazacak kadar, yani milisaniyeler
+tutulur. İki saniye geçmişse sahibi kilidi bırakamadan ölmüş ya da (Windows)
+silememiştir; içeriğine ya da sahibinin yaşayıp yaşamadığına bakmaya gerek yok.
+Böylece yarım kalmış bir kilit kuyruğu sonsuza dek tıkayamaz.
+"""
 
 
 @dataclass(frozen=True)
@@ -77,23 +90,73 @@ def state_dir(name: str = STATE_NAME) -> Path:
     return root / name
 
 
-def register(pid: int, name: str = STATE_NAME, text: str | None = None) -> None:
-    """Süreci kaydeder ve sıranın sonuna ekler.
+def register(pid: int, name: str = STATE_NAME, text: str | None = None) -> bool:
+    """Süreci kaydeder ve sıranın sonuna ekler; kaydolduysa True.
 
     Metin verilirse yalnızca özeti yazılır; tekrar tespiti ona bakar, metnin
-    kendisi kayda girmez. Dosya önce geçici ada yazılıp taşınır: sırayı okuyan
-    bir süreç yarım dosyayla karşılaşmasın.
+    kendisi kayda girmez. Sırada aynı metin zaten varsa kayıt geri alınır ve
+    False döner.
+
+    Damga alma, kaydı görünür kılma ve tekrar denetimi tek bir kayıt kilidi
+    altında yapılır: her kayıt, bir sonraki damgasını alamadan görünür olur,
+    dolayısıyla görünen her kayıt bizden önce girmiştir. Dosya önce geçici ada
+    yazılıp taşınır: sırayı okuyan bir süreç yarım dosyayla karşılaşmasın.
+    Yarıda kesilen kayıt (sinyal) kilidi de kaydı da geride bırakmaz.
     """
     directory = state_dir(name)
     directory.mkdir(parents=True, exist_ok=True)
-    record = {
-        "registered_ns": time.time_ns(),
-        "text_hash": _text_hash(text) if text is not None else None,
-    }
     target = directory / str(pid)
     partial = directory / f"{pid}.partial"
-    partial.write_text(json.dumps(record), encoding="utf-8")
-    os.replace(partial, target)
+    _acquire_registration_lock(directory)
+    try:
+        record = {
+            "registered_ns": time.time_ns(),
+            "text_hash": _text_hash(text) if text is not None else None,
+        }
+        partial.write_text(json.dumps(record), encoding="utf-8")
+        os.replace(partial, target)
+        if text is not None and _duplicate_registered(pid, name):
+            _remove_quietly(target)
+            return False
+        return True
+    except BaseException:
+        _remove_quietly(partial)
+        _remove_quietly(target)
+        raise
+    finally:
+        _remove_quietly(directory / REGISTRATION_LOCK_NAME)
+
+
+def _acquire_registration_lock(directory: Path) -> None:
+    """Kayıt kilidini alır; başkası tutuyorsa bırakılana ya da bayatlayana kadar bekler.
+
+    Kilit, `O_EXCL` ile oluşturulan boş bir dosyadır: aynı anda yalnız bir
+    süreç oluşturabilir, Windows'ta da çalışır. İçeriğine bakılmaz; bayatlık
+    yalnız yaşından okunur (bkz. `LOCK_STALE_SECONDS`).
+    """
+    path = directory / REGISTRATION_LOCK_NAME
+    while True:
+        try:
+            descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            if _lock_is_stale(path):
+                _remove_quietly(path)
+                # Silinemediyse (Windows) boşa dönmeyiz; aralıkla yeniden bakılır.
+                if not path.exists():
+                    continue
+            time.sleep(LOCK_POLL_SECONDS)
+            continue
+        os.close(descriptor)
+        return
+
+
+def _lock_is_stale(path: Path) -> bool:
+    """Kilit `LOCK_STALE_SECONDS`'tan eski mi? Arada silinmişse False: yeniden denenir."""
+    try:
+        age = time.time() - path.stat().st_mtime
+    except OSError:
+        return False
+    return age > LOCK_STALE_SECONDS
 
 
 def clear(pid: int, name: str = STATE_NAME) -> None:
@@ -104,8 +167,7 @@ def clear(pid: int, name: str = STATE_NAME) -> None:
 def entries(name: str = STATE_NAME) -> list[Entry]:
     """Kayıtlı ve hâlâ yaşayan Pakize süreçleri; sıra düzeninde, en eski önde.
 
-    En öndeki sıradaki ilk adaydır; çalan, kilidi tutandır (bkz. `lock_holder`).
-    Bayat kayıtlar sessizce temizlenir.
+    En öndeki çalandır, gerisi bekler. Bayat kayıtlar sessizce temizlenir.
     """
     directory = state_dir(name)
     if not directory.is_dir():
@@ -130,132 +192,47 @@ def running_pids(name: str = STATE_NAME) -> list[int]:
 
 
 def running_pid() -> int | None:
-    """Sıranın başındaki süreç; yoksa None."""
+    """Sıranın başındaki, yani çalmakta olan süreç; yoksa None."""
     pids = running_pids()
     return pids[0] if pids else None
 
 
-def playing_pid(name: str = STATE_NAME) -> int | None:
-    """Şu an çalan süreç: kilidi tutan; kilit yoksa sıranın başı; kimse yoksa None.
-
-    Kilit sahibi kayıtta görünmüyorsa (bayat kilit) sıranın başına düşülür.
-    """
-    pids = running_pids(name)
-    holder = lock_holder(name)
-    if holder in pids:
-        return holder
-    return pids[0] if pids else None
-
-
 def wait_for_turn(pid: int, name: str = STATE_NAME) -> None:
-    """Sıra gelene kadar bekler: süreç hem sıranın başı olmalı hem kilidi almalı.
-
-    Sıra tek başına yetmez: kayıt, zaman damgası alındıktan sonra görünür olur;
-    arada kendini baş sanan daha yeni bir kayıt çalmaya başlamış olabilir.
-    Kilit bu pencereyi kapatır — çalan kilidi bırakmadan ikincisi başlamaz.
+    """Sürecin önündeki kayıtlar bitene kadar bekler.
 
     Kendi kaydı silinmişse de döner: `pakize stop` süreci zaten
     sonlandırıyordur, burada takılı kalmanın anlamı yok.
     """
     while True:
         pids = running_pids(name)
-        if pid not in pids:
-            return
-        if pids[0] == pid and acquire_lock(pid, name):
+        if pid not in pids or pids[0] == pid:
             return
         time.sleep(QUEUE_POLL_SECONDS)
 
 
-def earlier_duplicate(pid: int, name: str = STATE_NAME) -> bool:
-    """Sırada bu süreçten önde ya da kilidi tutan kayıtlardan biri aynı metni taşıyor mu?
+def _duplicate_registered(pid: int, name: str = STATE_NAME) -> bool:
+    """Kayıttaki başka bir süreç aynı metni taşıyor mu? Kayıt kilidi altında çağrılır.
 
-    Önce kaydolup sonra bakmak yarışı belirli kılar: aynı anda giren iki
-    süreçten sıralamada arkada kalan tekrar sayılır, öndeki kalır. Kilidi
-    tutan da sayılır: daha yeni bir kayıt görünürlük penceresinde çalmaya
-    başlamışsa, sırada ondan önde görünen aynı metin de tekrardır. Metinsiz
-    kayıtlar hiçbir şeyle eşleşmez.
+    Kilit altında görünen her kayıt bizden önce girmiştir; sıradaki yerine
+    bakmaya gerek yok (aynı damgada küçük pid öne geçse bile tekrar odur, biz
+    değiliz). Metinsiz kayıtlar hiçbir şeyle eşleşmez.
     """
     queue = entries(name)
     own = next((entry for entry in queue if entry.pid == pid), None)
     if own is None or own.text_hash is None:
         return False
-    holder = lock_holder(name)
-    ahead = [
-        entry
-        for entry in queue
-        if entry.pid != pid and (queue.index(entry) < queue.index(own) or entry.pid == holder)
-    ]
-    return any(entry.text_hash == own.text_hash for entry in ahead)
-
-
-def acquire_lock(pid: int, name: str = STATE_NAME) -> bool:
-    """Çalma kilidini almayı dener; alındıysa True.
-
-    Kilit, `O_EXCL` ile oluşturulan tek bir dosyadır: aynı anda yalnız bir
-    süreç oluşturabilir, Windows'ta da çalışır. Sahibi ölmüş bir kilit bayat
-    sayılıp kaldırılır ve hemen yeniden denenir.
-    """
-    path = _lock_path(name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    for _attempt in range(2):
-        try:
-            descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            if not _remove_stale_lock(path):
-                return False
-            continue
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(str(pid))
-        return True
-    return False
-
-
-def release_lock(pid: int, name: str = STATE_NAME) -> None:
-    """Kilidi bırakır; yalnız kendi kilidini siler, başkasınınkine dokunmaz."""
-    path = _lock_path(name)
-    if _read_lock(path) == pid:
-        _remove_quietly(path)
-
-
-def lock_holder(name: str = STATE_NAME) -> int | None:
-    """Kilidi tutan süreç; kilit yoksa ya da henüz yazılmamışsa None."""
-    return _read_lock(_lock_path(name))
-
-
-def _lock_path(name: str) -> Path:
-    return state_dir(name) / LOCK_NAME
-
-
-def _read_lock(path: Path) -> int | None:
-    """Kilit dosyasındaki süreç numarası; dosya yoksa ya da henüz boşsa None."""
-    try:
-        return int(path.read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
-        return None
-
-
-def _remove_stale_lock(path: Path) -> bool:
-    """Sahibi ölmüş kilidi kaldırır; kaldırdıysa True.
-
-    Boş kilit bayat değildir: sahibi dosyayı açmış, numarasını henüz
-    yazmamıştır. Silmeden hemen önce yeniden okunur; arada başka bir süreç
-    bayat kilidi kaldırıp kendi kilidini koymuşsa o taze kilit silinmez.
-    """
-    holder = _read_lock(path)
-    if holder is None or _is_pakize(holder):
-        return False
-    if _read_lock(path) != holder:
-        return False
-    _remove_quietly(path)
-    return True
+    return any(
+        entry.text_hash == own.text_hash for entry in queue if entry.pid != pid
+    )
 
 
 def _remove_quietly(path: Path) -> None:
     """Dosyayı siler; yoksa ya da silinemiyorsa sessiz kalır.
 
     Windows'ta başka bir sürecin o an okuduğu dosya silinemez
-    (`PermissionError`). Dosya yerinde kalır; sahibi öldüğü için sonraki
-    okumada bayat sayılıp yok sayılır. Çıkış yolunu bu yüzden kırmayız.
+    (`PermissionError`). Dosya yerinde kalır: kayıt, sahibi öldüğü için sonraki
+    okumada bayat sayılır; kilit, yaşlanınca kaldırılır. Çıkış yolunu bu yüzden
+    kırmayız.
     """
     try:
         path.unlink()
