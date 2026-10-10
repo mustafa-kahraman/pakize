@@ -227,6 +227,56 @@ def test_duzeltme_tablosunda_bos_anahtar_reddedilir(tmp_path):
         load_config(path)
 
 
+def test_okunus_tablosu_okunur(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[tts_replacements]\n"Python" = "paytın"\n"KVKK" = "ka ve ka ka"\n',
+        encoding="utf-8",
+    )
+
+    assert load_config(path).tts_replacements == {
+        "Python": "paytın",
+        "KVKK": "ka ve ka ka",
+    }
+
+
+def test_okunus_tablosu_varsayilani_bos(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('voice = "tr-TR-EmelNeural"\n', encoding="utf-8")
+
+    assert load_config(path).tts_replacements == {}
+    assert Config().tts_replacements == {}
+
+
+def test_okunus_tablosunda_metin_olmayan_deger_tablo_adiyla_reddedilir(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text("[tts_replacements]\nPython = 1\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"\[tts_replacements\] içinde 'Python' için metin bekleniyor"):
+        load_config(path)
+
+
+def test_okunus_tablosunda_bos_anahtar_tablo_adiyla_reddedilir(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('[tts_replacements]\n"" = "paytın"\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"\[tts_replacements\] içinde boş anahtar var"):
+        load_config(path)
+
+
+def test_duzeltme_tablosu_hatalari_kendi_adini_soyler(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('[asr_replacements]\n"" = "uv"\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"\[asr_replacements\] içinde boş anahtar var"):
+        load_config(path)
+
+    path.write_text("[asr_replacements]\nuv = 1\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"\[asr_replacements\] içinde 'uv' için metin bekleniyor"):
+        load_config(path)
+
+
 def test_asr_baglami_set_ile_yazilir(tmp_path):
     path = tmp_path / "config.toml"
 

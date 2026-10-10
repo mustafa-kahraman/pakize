@@ -87,3 +87,13 @@ def test_degistirilen_varsayilan_dosyaya_yansir(monkeypatch):
 
     assert 'voice = "tr-TR-AhmetNeural"' in icerik
     assert "rate = 1.3" in icerik
+
+
+def test_okunus_tablosu_sablonda_yorumlu_orneklerle_yer_alir():
+    icerik = render_default_config()
+
+    assert "[tts_replacements]" in icerik
+    assert '# "Python" = "paytın"' in icerik
+    assert '# "KVKK" = "ka ve ka ka"' in icerik
+    # Örnekler yorumdur: şablon yerleşik bir okunuş sözlüğü getirmez.
+    assert Config().tts_replacements == {}

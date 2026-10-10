@@ -602,10 +602,12 @@ _EN: dict[str, str] = {
         '# Spellings to fix in the transcript: "wrong" = "right"',
     "# Yalnız bütün kelime eşleşir; büyük-küçük harf ayrı sayılır.":
         "# Only whole words match; upper and lower case are distinct.",
-    "[asr_replacements] içinde boş anahtar var.":
-        "[asr_replacements] contains an empty key.",
-    "[asr_replacements] içinde {key!r} için metin bekleniyor.":
-        "[asr_replacements] expects text for {key!r}.",
+    '# Seslendirmede kelimelerin okunuşu: "kelime" = "okunuşu"':
+        '# How words are pronounced when spoken: "word" = "pronunciation"',
+    "[{table}] içinde boş anahtar var.":
+        "[{table}] contains an empty key.",
+    "[{table}] içinde {key!r} için metin bekleniyor.":
+        "[{table}] expects text for {key!r}.",
     "bir deşifre isteğinin azami süresi (saniye)":
         "maximum duration of a transcription request (seconds)",
     # --- dikte ---

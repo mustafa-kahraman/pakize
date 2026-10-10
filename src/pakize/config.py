@@ -146,6 +146,13 @@ class Config:
     girmez; aynı çıktı her seferinde aynı biçimde düzelir.
     """
 
+    tts_replacements: dict[str, str] = field(default_factory=dict)
+    """Seslendirilecek metne uygulanan okunuş tablosu: kelime → okunuşu.
+
+    Motordan bağımsızdır; `"Python" = "paytın"` gibi. Kodda yerleşik bir
+    sözlük yoktur, tablo yalnız kullanıcının yazdığıdır.
+    """
+
     asr_timeout: float = 300.0
     """Bir deşifre isteğinin azami süresi (saniye).
 
@@ -278,9 +285,10 @@ def _apply_overrides(base: Config, data: dict) -> Config:
     if isinstance(policy_table, dict):
         overrides["policy"] = _merge_policy(base.policy, policy_table)
 
-    replacements_table = data.get("asr_replacements")
-    if isinstance(replacements_table, dict):
-        overrides["asr_replacements"] = _read_replacements(replacements_table)
+    for table_name in ("asr_replacements", "tts_replacements"):
+        replacements_table = data.get(table_name)
+        if isinstance(replacements_table, dict):
+            overrides[table_name] = _read_replacements(table_name, replacements_table)
 
     return replace(base, **overrides)
 
@@ -378,6 +386,12 @@ def render_default_config() -> str:
         _("# Deşifre çıktısında düzeltilecek yazımlar: \"yanlış\" = \"doğru\""),
         _("# Yalnız bütün kelime eşleşir; büyük-küçük harf ayrı sayılır."),
         '# "Yuvı" = "uv"',
+        "",
+        "[tts_replacements]",
+        _("# Seslendirmede kelimelerin okunuşu: \"kelime\" = \"okunuşu\""),
+        _("# Yalnız bütün kelime eşleşir; büyük-küçük harf ayrı sayılır."),
+        '# "Python" = "paytın"',
+        '# "KVKK" = "ka ve ka ka"',
     ]
 
     return "\n".join(lines) + "\n"
@@ -664,21 +678,24 @@ def _merge_policy(
     return merged
 
 
-def _read_replacements(table: dict) -> dict[str, str]:
-    """Config'teki `[asr_replacements]` tablosunu okur.
+def _read_replacements(table_name: str, table: dict) -> dict[str, str]:
+    """Config'teki `[asr_replacements]` ya da `[tts_replacements]` tablosunu okur.
 
     Dizge olmayan değer sessizce `str`'e çevrilmez: `uv = 1` gibi bir yazım
     hatası metne "1" basardı. Boş anahtar da reddedilir; hiçbir şeyle eşleşmez,
-    kullanıcı neden çalışmadığını anlayamazdı.
+    kullanıcı neden çalışmadığını anlayamazdı. Hata mesajı tabloyu adıyla
+    söyler ki kullanıcı hangi tabloya bakacağını bilsin.
     """
     replacements: dict[str, str] = {}
     for wrong, right in table.items():
         if not wrong.strip():
-            raise ValueError(_("[asr_replacements] içinde boş anahtar var."))
+            raise ValueError(
+                _("[{table}] içinde boş anahtar var.").format(table=table_name)
+            )
         if not isinstance(right, str):
             raise ValueError(
-                _("[asr_replacements] içinde {key!r} için metin bekleniyor.").format(
-                    key=wrong
+                _("[{table}] içinde {key!r} için metin bekleniyor.").format(
+                    table=table_name, key=wrong
                 )
             )
         replacements[wrong] = right
