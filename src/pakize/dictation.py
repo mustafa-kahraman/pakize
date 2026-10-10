@@ -87,6 +87,10 @@ TONES: dict[str, Tone] = {
     "done": Tone(((880, 0.10), (1175, 0.18))),
     # Pes ve uzun: "olmadı".
     "error": Tone(((220, 0.35),)),
+    # Kısa ve yükselen: "aldım, sıraya girdi" (`pakize speak`).
+    "accept": Tone(((523, 0.07), (784, 0.09))),
+    # Tek, pesçe nota: "bu metin zaten sırada, okumuyorum".
+    "duplicate": Tone(((330, 0.18),)),
 }
 """Varsayılan tonlar. Dosya taşımaz, lisans gerektirmez; ffmpeg üretir."""
 
@@ -119,9 +123,11 @@ def tone(name: str, config: Config) -> Path:
     """Bir tonun ses dosyasını döner.
 
     Config'te o ton için dosya gösterilmişse o kullanılır; yoksa varsayılan
-    ton ilk seferde üretilip önbelleğe yazılır.
+    ton ilk seferde üretilip önbelleğe yazılır. Her tonun config anahtarı
+    yoktur (okuma tonları yalnızca üretilir); o zaman doğrudan varsayılana
+    düşülür.
     """
-    custom: Path | None = getattr(config, f"dictate_{name}_sound")
+    custom: Path | None = getattr(config, f"dictate_{name}_sound", None)
     if custom is not None:
         if not custom.is_file():
             raise DictationError(

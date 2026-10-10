@@ -76,6 +76,32 @@ def test_her_tonun_dosyasi_ayridir(uretilen_tonlar):
         assert path.name.startswith(f"{name}-")
 
 
+def test_okuma_tonlari_config_anahtari_olmadan_uretilir(uretilen_tonlar):
+    """`accept` ve `duplicate` için config alanı yok; doğrudan varsayılana düşer."""
+    for name in ("accept", "duplicate"):
+        assert not hasattr(Config(), f"dictate_{name}_sound")
+        path = dictation.tone(name, Config())
+        assert path.name.startswith(f"{name}-")
+        assert path.read_bytes() == b"RIFF-ton"
+
+
+def test_okuma_tonlari_dikte_tonlarindan_farklidir():
+    accept, duplicate = dictation.TONES["accept"], dictation.TONES["duplicate"]
+    others = [
+        tone
+        for name, tone in dictation.TONES.items()
+        if name not in ("accept", "duplicate")
+    ]
+
+    assert accept not in others and duplicate not in others
+    assert accept != duplicate
+    # Alındı: kısa ve yükselen. Tekrar: tek, pesçe nota; hata tonundan ayrı.
+    assert [f for f, _ in accept.notes] == sorted(f for f, _ in accept.notes)
+    assert sum(d for _, d in accept.notes) < 0.2
+    assert len(duplicate.notes) == 1
+    assert duplicate.notes[0][0] < 500
+
+
 def test_config_teki_ses_dosyasi_ton_yerine_gecer(tmp_path, uretilen_tonlar):
     custom = tmp_path / "bip.mp3"
     custom.write_bytes(b"mp3")
