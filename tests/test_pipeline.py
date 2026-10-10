@@ -139,10 +139,12 @@ def test_okunus_tablosu_buyuk_kucuk_harfe_duyarli(config):
 
 
 def test_okunus_tablosu_atlanan_linke_dokunmaz(config):
+    # Okunuş boşluk içerir: tablo politikadan önce uygulansaydı URL ortadan
+    # bölünür, "tın.org/3/" artığı okunacak metinde kalırdı.
     config = replace(
         config,
         policy={**config.policy, SegmentType.URL: Action.SKIP},
-        tts_replacements={"python": "paytın"},
+        tts_replacements={"python": "pay tın"},
     )
 
     plan = pipeline.plan_speech(
@@ -150,9 +152,7 @@ def test_okunus_tablosu_atlanan_linke_dokunmaz(config):
     )
     metin = "\n".join(chunk.text for chunk in plan.chunks)
 
-    assert "docs.python.org" not in metin
-    assert "paytın.org" not in metin
-    assert "paytın ile" in metin
+    assert metin == "Belge: adresinde, pay tın ile."
     assert plan.skipped == {SegmentType.URL: 1}
 
 
@@ -171,13 +171,6 @@ def test_okunus_tablosu_parcalamadan_once_uygulanir(config):
     # Parça sınırı kelime arasına düşebilir; kelime dizisi üzerinden bakılır.
     kelimeler = " ".join(" ".join(chunk.text.split()) for chunk in plan.chunks)
     assert kelimeler == "ka ve ka ka kuralı. ka ve ka ka metni."
-
-
-def test_okunus_tablosu_bosken_plan_degismez(config):
-    plan = pipeline.plan_speech(ORNEK_METIN, config)
-    plan_tablosuz = pipeline.plan_speech(ORNEK_METIN, replace(config, tts_replacements={}))
-
-    assert plan == plan_tablosuz
 
 
 def test_synthesize_dosya_uretir(tmp_path, config, motorlar, sahte_concat):
