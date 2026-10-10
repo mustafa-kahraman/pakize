@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from ..config import Config
 from ..i18n import _
+from .antalia import AntaliaEngine
 from .base import EngineError, EngineUnavailable, TtsEngine
 from .edge import EdgeEngine
 from .ema import EmaEngine
@@ -17,6 +18,7 @@ _REGISTRY: dict[str, type[TtsEngine]] = {
     EdgeEngine.name: EdgeEngine,
     PiperEngine.name: PiperEngine,
     EmaEngine.name: EmaEngine,
+    AntaliaEngine.name: AntaliaEngine,
 }
 
 
@@ -44,6 +46,7 @@ __all__ = [
     "EdgeEngine",
     "PiperEngine",
     "EmaEngine",
+    "AntaliaEngine",
     "create_engine",
     "available_engines",
 ]
