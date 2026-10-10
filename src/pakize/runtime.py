@@ -61,6 +61,12 @@ Kilit yalnız bir zaman damgası alıp bir dosya yazacak kadar, yani milisaniyel
 tutulur. İki saniye geçmişse sahibi kilidi bırakamadan ölmüş ya da (Windows)
 silememiştir; içeriğine ya da sahibinin yaşayıp yaşamadığına bakmaya gerek yok.
 Böylece yarım kalmış bir kilit kuyruğu sonsuza dek tıkayamaz.
+
+Bilinen sınır: bayat kilit kaldırılırken iki bekleyen, nadiren, aynı anda
+birbirinin taze kilidini silip kayda birlikte girebilir. Bu yalnız bir süreç
+kaydın ortasında öldürüldükten (ya da Windows'ta kilit bırakılamadıktan) sonra
+ve aynı anda birden çok basış beklerken olur; sonucu en fazla tek bir üst üste
+çalmadır, asla takılma değil.
 """
 
 
@@ -109,8 +115,12 @@ def register(pid: int, name: str = STATE_NAME, text: str | None = None) -> bool:
     partial = directory / f"{pid}.partial"
     _acquire_registration_lock(directory)
     try:
+        # Damga saatten büyük olmak zorunda değil, kayıttakilerden büyük olmak
+        # zorunda: Windows'ta saat 1-16 ms'de bir ilerler ve eşit damgada sıra
+        # pid'e düşer, yani sonradan giren öne geçebilirdi.
+        latest = max((entry.registered_ns for entry in entries(name)), default=-1)
         record = {
-            "registered_ns": time.time_ns(),
+            "registered_ns": max(time.time_ns(), latest + 1),
             "text_hash": _text_hash(text) if text is not None else None,
         }
         partial.write_text(json.dumps(record), encoding="utf-8")

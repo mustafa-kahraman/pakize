@@ -214,25 +214,26 @@ def test_sira_kayit_zamanina_gore_kurulur_dosya_zamanina_degil(
 ):
     """mtime dosya sistemine göre kaba olabilir; sıra kayda yazılan damgadan okunur."""
     pakize_surecleri(1111, 2222)
-    zaman(200)
-    runtime.register(1111)
     zaman(100)
+    runtime.register(1111)
+    zaman(200)
     runtime.register(2222)
-    # Dosya zamanları tersini söylesin: 1111 daha eski görünsün.
-    os.utime(runtime.state_dir() / "1111", (1, 1))
-    os.utime(runtime.state_dir() / "2222", (9_000_000, 9_000_000))
+    # Dosya zamanları tersini söylesin: 2222 daha eski görünsün.
+    os.utime(runtime.state_dir() / "1111", (9_000_000, 9_000_000))
+    os.utime(runtime.state_dir() / "2222", (1, 1))
 
-    assert runtime.running_pids() == [2222, 1111]
-    assert runtime.running_pid() == 2222
+    assert runtime.running_pids() == [1111, 2222]
+    assert runtime.running_pid() == 1111
 
 
-def test_ayni_anda_giren_kayitlarda_kucuk_pid_onde(pakize_surecleri, zaman):
+def test_ayni_anda_giren_kayitlar_giris_sirasini_korur(pakize_surecleri, zaman):
+    """Saat ilerlemese de damgalar tekildir; küçük pid öne geçemez."""
     pakize_surecleri(1111, 2222)
     zaman(500)
     runtime.register(2222)
     runtime.register(1111)
 
-    assert runtime.running_pids() == [1111, 2222]
+    assert runtime.running_pids() == [2222, 1111]
 
 
 def test_kayit_metnin_ozetini_tasir_metni_degil(pakize_surecleri):
@@ -389,6 +390,21 @@ def test_kilit_kayit_bitince_birakilir(pakize_surecleri):
     runtime.register(1111)
 
     assert not _kayit_kilidi().exists()
+
+
+@pytest.mark.parametrize("saat", [100, 500], ids=["saat-geride", "saat-esit"])
+def test_damga_kayittakilerden_buyuk_olur_saat_ilerlemese_de(pakize_surecleri, zaman, saat):
+    """Windows'ta saat 1-16 ms'de bir ilerler; eşit damga sırayı pid'e düşürürdü."""
+    pakize_surecleri(1111, 2222)
+    zaman(500)
+    runtime.register(2222)
+    zaman(saat)
+
+    runtime.register(1111)
+
+    kayitlar = {entry.pid: entry.registered_ns for entry in runtime.entries()}
+    assert kayitlar[1111] == 501
+    assert runtime.running_pids() == [2222, 1111]
 
 
 @pytest.mark.parametrize("icerik", ["", "9999"], ids=["bos", "dolu"])
