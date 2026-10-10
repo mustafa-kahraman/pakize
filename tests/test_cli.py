@@ -6,6 +6,7 @@ klasöre yönlendirilir.
 
 import asyncio
 import os
+import re
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -796,10 +797,11 @@ def test_dur_bekleyenleri_de_durdurur(monkeypatch):
 
 
 def test_dur_all_secenegi_yok():
+    """`--all` yok; hata metni ANSI renk kodlarından arındırılarak denetlenir (CI renkli yazar)."""
     sonuc = runner.invoke(cli.app, ["stop", "--all"])
 
     assert sonuc.exit_code == 2
-    assert "--all" in sonuc.output
+    assert "--all" in re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", sonuc.output)
 
 
 def test_sonraki_yalniz_calani_keser(monkeypatch):
