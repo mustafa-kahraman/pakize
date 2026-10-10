@@ -123,7 +123,10 @@ _EN: dict[str, str] = {
         "an interrupted run resumes with the same command.",
     "Çalmakta olan seslendirmeyi duraklatır; duraklatılmışsa sürdürür.":
         "Pauses the current playback; resumes it if already paused.",
-    "Çalmakta olan seslendirmeyi durdurur.": "Stops the current playback.",
+    "Çalmakta olan seslendirmeyi durdurur; sıradaki başlar.":
+        "Stops the current playback; the next one in the queue starts.",
+    "Sıradakilerle birlikte tüm seslendirmeleri durdur.":
+        "Stop every playback, including the queued ones.",
     "En son üretilen ses dosyasını yeniden çalar.":
         "Replays the most recently produced audio file.",
     "Edge motorunun sunduğu sesleri listeler.":
@@ -215,6 +218,9 @@ _EN: dict[str, str] = {
         "No speech to read was found in the transcript.",
     "İpucu: dil ve ses seçimi için 'pakize setup' (bir kez yeter).":
         "Hint: run 'pakize setup' once to pick a language and voice.",
+    "Aynı metin zaten sırada; bu okuma atlandı.":
+        "The same text is already queued; this reading was skipped.",
+    "İşaret sesi çalınamadı: {error}": "Could not play the cue tone: {error}",
     # --- pause / stop / replay ---
     "Çalan bir seslendirme yok.": "No speech is playing.",
     "Devam ediyor": "Resumed",

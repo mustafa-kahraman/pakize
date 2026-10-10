@@ -17,6 +17,17 @@ from pakize.config import Config
 
 runner = CliRunner()
 
+GERCEK_PLAY_TONE = cli._play_tone
+"""Yamalanmadan önceki `_play_tone`; ton hatasını sınayan test geri takar."""
+
+
+@pytest.fixture(autouse=True)
+def tonlar(monkeypatch) -> list[str]:
+    """İşaret seslerini çalmaz, adlarını kaydeder; gerçek ton üretimi ffmpeg ister."""
+    kayit: list[str] = []
+    monkeypatch.setattr(cli, "_play_tone", lambda name, config: kayit.append(name))
+    return kayit
+
 
 @pytest.fixture
 def cikti_dizini(tmp_path, monkeypatch) -> Path:
@@ -330,6 +341,238 @@ def test_calma_kapaliyken_surec_kaydedilmez(cikti_dizini, monkeypatch):
     assert kayitli == [None]
 
 
+# --- okuma kuyruğu -----------------------------------------------------------
+
+ONDEKI_PID = 1111
+"""Sırada bizden önce duran sahte sürecin numarası."""
+
+
+@pytest.fixture
+def kuyruk(cikti_dizini, monkeypatch):
+    """Kayıttaki her süreci yaşıyor sayar; bekleme uykusunu kaydeder.
+
+    `uykuda` listesine eklenen işlev ilk uykuda çağrılır: öndekinin kaydını
+    düşürüp sıranın bize gelmesini canlandırır.
+    """
+    from pakize.pipeline import Plan, SpeechResult
+
+    durum = {"uretilen": [], "uykular": 0, "ilk_uykuda": lambda: None}
+    monkeypatch.setattr(cli.runtime, "_is_pakize", lambda pid: True)
+    monkeypatch.setattr(cli.audio, "play", lambda path: None)
+
+    def sahte_uyku(seconds):
+        durum["uykular"] += 1
+        if durum["uykular"] == 1:
+            durum["ilk_uykuda"]()
+
+    monkeypatch.setattr(cli.runtime.time, "sleep", sahte_uyku)
+
+    def sahte_synthesize(text, destination, config, progress=None, on_part_ready=None):
+        durum["uretilen"].append((text, cli.runtime.running_pids()))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"sahte-ses")
+        return SpeechResult(output=destination, plan=Plan(), engine=config.engine)
+
+    monkeypatch.setattr(cli, "synthesize", sahte_synthesize)
+    return durum
+
+
+def test_alindi_tonu_uretimden_once_calinir(kuyruk, tonlar, monkeypatch):
+    sira: list[str] = []
+    monkeypatch.setattr(cli, "_play_tone", lambda name, config: sira.append(name))
+    gercek = cli.synthesize
+    monkeypatch.setattr(
+        cli, "synthesize", lambda *args, **kwargs: sira.append("synth") or gercek(*args, **kwargs)
+    )
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    assert sira == ["accept", "synth"]
+
+
+@pytest.mark.parametrize("bayrak", ["--no-play", "--dry-run"])
+def test_calma_yokken_ton_calinmaz(kuyruk, tonlar, bayrak):
+    sonuc = runner.invoke(cli.app, ["speak", bayrak], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    assert tonlar == []
+
+
+@pytest.mark.parametrize(
+    "bozuk",
+    [
+        pytest.param(("tone", cli.dictation.DictationError("ton üretilemedi")), id="ton"),
+        pytest.param(("play", cli.audio.AudioError("ffplay yok")), id="calma"),
+    ],
+)
+def test_ton_calinamazsa_uyarir_ve_okuma_surer(kuyruk, monkeypatch, bozuk):
+    nerede, hata = bozuk
+
+    def patla(*args):
+        raise hata
+
+    monkeypatch.setattr(cli, "_play_tone", GERCEK_PLAY_TONE)
+    if nerede == "tone":
+        monkeypatch.setattr(cli.dictation, "tone", patla)
+    else:
+        ton = Path("ton.wav")
+        monkeypatch.setattr(cli.dictation, "tone", lambda name, config: ton)
+        # Yalnızca ton patlasın; asıl ses çalınabilsin.
+        monkeypatch.setattr(
+            cli.audio, "play", lambda path: patla() if path == ton else None
+        )
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    assert "İşaret sesi çalınamadı" in sonuc.stderr
+    assert len(kuyruk["uretilen"]) == 1
+
+
+def test_sira_gelmeden_uretim_baslamaz(kuyruk):
+    cli.runtime.register(ONDEKI_PID, text="Başka bir metin.")
+    kuyruk["ilk_uykuda"] = lambda: cli.runtime.clear(ONDEKI_PID)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    assert kuyruk["uykular"] == 1
+    # Üretim başladığında öndeki gitmiş, sırada yalnız biz varız.
+    assert kuyruk["uretilen"] == [("Merhaba.\n", [os.getpid()])]
+    assert cli.runtime.running_pids() == []
+
+
+def test_ayni_metin_siradaysa_okuma_atlanir(kuyruk, tonlar):
+    cli.runtime.register(ONDEKI_PID, text="Merhaba.\n")
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    assert "atlandı" in sonuc.stdout
+    assert tonlar == ["duplicate"]
+    assert kuyruk["uretilen"] == []
+    assert kuyruk["uykular"] == 0
+    # Öndeki kalır, bizim kaydımız düşer.
+    assert cli.runtime.running_pids() == [ONDEKI_PID]
+
+
+def test_farkli_metin_siraya_girer(kuyruk, tonlar):
+    cli.runtime.register(ONDEKI_PID, text="Başka.\n")
+    kuyruk["ilk_uykuda"] = lambda: cli.runtime.clear(ONDEKI_PID)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    assert tonlar == ["accept"]
+    assert len(kuyruk["uretilen"]) == 1
+
+
+@pytest.mark.parametrize(
+    ("bizim_pid", "kalan"),
+    [(2222, "öndeki"), (ONDEKI_PID - 1, "biz")],
+    ids=["arkadaki-gider", "ondeki-kalir"],
+)
+def test_ayni_anda_basilan_tekrarda_sonuc_belirli(kuyruk, tonlar, monkeypatch, bizim_pid, kalan):
+    """İki basış aynı zaman damgasını alsa da küçük pid kalır, diğeri çekilir."""
+    monkeypatch.setattr(cli.runtime.time, "time_ns", lambda: 500)
+    monkeypatch.setattr(cli.os, "getpid", lambda: bizim_pid)
+    cli.runtime.register(ONDEKI_PID, text="Merhaba.\n")
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 0
+    if kalan == "öndeki":
+        assert tonlar == ["duplicate"]
+        assert kuyruk["uretilen"] == []
+        assert cli.runtime.running_pids() == [ONDEKI_PID]
+    else:
+        assert tonlar == ["accept"]
+        assert len(kuyruk["uretilen"]) == 1
+        assert cli.runtime.running_pids() == [ONDEKI_PID]
+
+
+def test_beklerken_durdurulan_surec_130_ile_cikar_kayit_birakmaz(kuyruk):
+    cli.runtime.register(ONDEKI_PID, text="Başka.\n")
+
+    def sinyal():
+        raise KeyboardInterrupt
+
+    kuyruk["ilk_uykuda"] = sinyal
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 130
+    assert "Durduruldu." in sonuc.stdout
+    assert kuyruk["uretilen"] == []
+    assert cli.runtime.running_pids() == [ONDEKI_PID]
+
+
+def test_replay_sirasini_bekler(cikti_dizini, kuyruk, monkeypatch):
+    """Tekrar çalma da kuyruğa girer; iki Pakize üst üste çalmaz."""
+    _ses_yaz(cikti_dizini, "kayit.mp3", mtime=2_000)
+    cli.runtime.register(ONDEKI_PID, text="Başka.\n")
+    kuyruk["ilk_uykuda"] = lambda: cli.runtime.clear(ONDEKI_PID)
+    calarken: list[list[int]] = []
+    monkeypatch.setattr(
+        cli.audio, "play", lambda path: calarken.append(cli.runtime.running_pids())
+    )
+
+    sonuc = runner.invoke(cli.app, ["replay"])
+
+    assert sonuc.exit_code == 0
+    assert kuyruk["uykular"] == 1
+    assert calarken == [[os.getpid()]]
+
+
+def test_dur_yalnizca_calani_durdurur_siradaki_kalir(monkeypatch):
+    durdurulan: list[int] = []
+    monkeypatch.setattr(cli.runtime, "running_pids", lambda: [ONDEKI_PID, 2222])
+    monkeypatch.setattr(cli.runtime, "stop", lambda pid: bool(durdurulan.append(pid) or True))
+
+    sonuc = runner.invoke(cli.app, ["stop"])
+
+    assert sonuc.exit_code == 0
+    assert durdurulan == [ONDEKI_PID]
+    assert sonuc.stdout.strip() == "Durduruldu."
+
+
+def test_dur_all_bekleyenleri_de_durdurur(monkeypatch):
+    durdurulan: list[int] = []
+    monkeypatch.setattr(cli.runtime, "running_pids", lambda: [ONDEKI_PID, 2222])
+    monkeypatch.setattr(cli.runtime, "stop", lambda pid: bool(durdurulan.append(pid) or True))
+
+    sonuc = runner.invoke(cli.app, ["stop", "--all"])
+
+    assert sonuc.exit_code == 0
+    assert durdurulan == [ONDEKI_PID, 2222]
+    assert "Durduruldu. (2 seslendirme)" in sonuc.stdout
+
+
+def test_dur_all_kayit_yoksa_bilgi_verir(monkeypatch):
+    monkeypatch.setattr(cli.runtime, "running_pids", lambda: [])
+
+    sonuc = runner.invoke(cli.app, ["stop", "--all"])
+
+    assert sonuc.exit_code == 1
+    assert "Çalan bir seslendirme yok." in sonuc.stdout
+
+
+def test_duraklat_yalniz_calani_duraklatir_bekleyenler_bekler(monkeypatch):
+    duraklatilan: list[int] = []
+    monkeypatch.setattr(cli.runtime, "running_pids", lambda: [ONDEKI_PID, 2222])
+    monkeypatch.setattr(cli.runtime, "is_paused", lambda pid: False)
+    monkeypatch.setattr(
+        cli.runtime, "pause", lambda pid: bool(duraklatilan.append(pid) or True)
+    )
+
+    sonuc = runner.invoke(cli.app, ["pause"])
+
+    assert sonuc.exit_code == 0
+    assert duraklatilan == [ONDEKI_PID]
+    assert sonuc.stdout.strip() == "Duraklatıldı."
+
+
 def test_config_init_dosya_olusturur(tmp_path, monkeypatch):
     hedef = tmp_path / "pakize" / "config.toml"
     monkeypatch.setattr(cli, "config_path", lambda: hedef)
@@ -607,7 +850,7 @@ def rate_limited(cikti_dizini, monkeypatch) -> list[Path]:
     monkeypatch.setattr(cli, "synthesize", limited_synthesize)
     monkeypatch.setattr(cli.notices, "rate_limit_notice", lambda config: notice)
     monkeypatch.setattr(cli.audio, "play", played.append)
-    monkeypatch.setattr(cli.runtime, "register", lambda pid: None)
+    monkeypatch.setattr(cli.runtime, "register", lambda pid, text=None: None)
     monkeypatch.setattr(cli.runtime, "clear", lambda pid: None)
     return played
 
@@ -842,7 +1085,7 @@ def test_sonda_calma_basarisizsa_bildirim_gosterilir(cikti_dizini, bildirimler, 
 
     monkeypatch.setattr(cli, "synthesize", fake_synthesize)
     monkeypatch.setattr(cli.audio, "play", no_player)
-    monkeypatch.setattr(cli.runtime, "register", lambda pid: None)
+    monkeypatch.setattr(cli.runtime, "register", lambda pid, text=None: None)
     monkeypatch.setattr(cli.runtime, "clear", lambda pid: None)
 
     sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")

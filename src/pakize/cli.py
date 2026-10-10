@@ -13,6 +13,7 @@ import sys
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 import typer
 
@@ -29,7 +30,7 @@ from .config import (
 from .asr import AsrError, asr_server, create_asr_engine
 from .engines import EdgeEngine, EngineError, available_engines
 from .models import SegmentType
-from .pipeline import TranslationError, plan_speech, synthesize
+from .pipeline import SpeechResult, TranslationError, plan_speech, synthesize
 from .sources import (
     ClipboardError,
     Roles,
@@ -160,7 +161,11 @@ def speak(
     # Akıcı modda parçalar üretildikçe çalınır; sonda ikinci kez çalmayız.
     streaming = play and config.stream
     try:
-        with _stoppable(play):
+        # Üretim ve çalma tek kayıt altında: arada kayıt düşerse sıradaki
+        # başlar ve bu okuma sıranın sonuna atılırdı.
+        with _stoppable(
+            play, text=text, on_queued=lambda: _play_tone("accept", config)
+        ):
             result = synthesize(
                 text,
                 destination,
@@ -168,6 +173,15 @@ def speak(
                 progress=_progress,
                 on_part_ready=audio.play_async if streaming else None,
             )
+            _print_result(result, config)
+            if play and not streaming:
+                audio.play(result.output)
+    except _DuplicateText:
+        _play_tone("duplicate", config)
+        typer.secho(
+            _("Aynı metin zaten sırada; bu okuma atlandı."), fg=typer.colors.YELLOW
+        )
+        return
     except KeyboardInterrupt:
         typer.secho("\n" + _("Durduruldu."), fg=typer.colors.YELLOW)
         raise typer.Exit(code=130) from None
@@ -188,6 +202,9 @@ def speak(
             desktop.notify(message)
         raise typer.Exit(code=1) from exc
 
+
+def _print_result(result: SpeechResult, config: Config) -> None:
+    """Üretim bitince ne okunmadığını ve dosyanın yerini bildirir."""
     typer.echo()
     _print_skipped(result.plan.skipped)
     typer.secho(_("Hazır: {path}").format(path=result.output), fg=typer.colors.GREEN)
@@ -198,19 +215,6 @@ def speak(
             ),
             fg=typer.colors.YELLOW,
         )
-
-    if play and not streaming:
-        try:
-            with _stoppable(True):
-                audio.play(result.output)
-        except KeyboardInterrupt:
-            typer.secho("\n" + _("Durduruldu."), fg=typer.colors.YELLOW)
-            raise typer.Exit(code=130) from None
-        except audio.AudioError as exc:
-            message = _("Ses hatası: {error}").format(error=exc)
-            typer.secho(message, fg=typer.colors.RED, err=True)
-            desktop.notify(message)
-            raise typer.Exit(code=1) from exc
 
 
 @app.command(
@@ -517,13 +521,12 @@ def pause() -> None:
     Tek komutun iki işi görmesi kasıtlı: klavye kısayolunda aynı tuşla hem
     durdurup hem devam edebilirsin.
     """
-    pids = runtime.running_pids()
+    # Yalnızca sıranın başı çalar; bekleyenlerin duraklatılacak sesi yoktur.
+    pids = runtime.running_pids()[:1]
     if not pids:
         typer.secho(_("Çalan bir seslendirme yok."), fg=typer.colors.YELLOW)
         raise typer.Exit(code=1)
 
-    # Herhangi biri duraklatılmışsa hepsini sürdürürüz; aksi hâlde aynı tuşa
-    # basmak bazılarını duraklatıp bazılarını sürdürerek karmaşa yaratırdı.
     if any(runtime.is_paused(pid) for pid in pids):
         affected = sum(runtime.resume(pid) for pid in pids)
         _report(
@@ -543,19 +546,26 @@ def pause() -> None:
     )
 
 
-@app.command(help=_("Çalmakta olan seslendirmeyi durdurur."))
-def stop() -> None:
-    """Çalmakta olan seslendirmeyi durdurur."""
+@app.command(help=_("Çalmakta olan seslendirmeyi durdurur; sıradaki başlar."))
+def stop(
+    everything: bool = typer.Option(
+        False, "--all", help=_("Sıradakilerle birlikte tüm seslendirmeleri durdur.")
+    ),
+) -> None:
+    """Çalmakta olan seslendirmeyi durdurur; sıradaki başlar.
+
+    Varsayılan "atla"dır: yalnızca sıranın başındaki, yani çalan kesilir ve
+    bekleyen ilk okuma kendiliğinden başlar. `--all` bekleyenleri de bitirir.
+    """
     pids = runtime.running_pids()
     if not pids:
         typer.secho(_("Çalan bir seslendirme yok."), fg=typer.colors.YELLOW)
         raise typer.Exit(code=1)
 
-    # Hepsi durdurulur: aynı anda birden çok ses çalıyorsa "durdur" demek
-    # sesin kesilmesi demektir, birinin kesilmesi değil.
-    affected = sum(runtime.stop(pid) for pid in pids)
+    targets = pids if everything else pids[:1]
+    affected = sum(runtime.stop(pid) for pid in targets)
     _report(
-        affected, len(pids), _("Durduruldu"), _("Seslendirme zaten sonlanmış.")
+        affected, len(targets), _("Durduruldu"), _("Seslendirme zaten sonlanmış.")
     )
 
 
@@ -1123,13 +1133,43 @@ def _announce_rate_limit(config: Config) -> None:
         desktop.notify(notices.rate_limit_text(i18n.language()))
 
 
+class _DuplicateText(Exception):
+    """Aynı metin sırada zaten var; bu okuma yapılmaz."""
+
+
+def _play_tone(name: str, config: Config) -> None:
+    """Kısa bir işaret sesi çalar.
+
+    Ton üretilemez ya da çalınamazsa yalnızca uyarır: işaret sesi okumanın
+    önüne geçmemeli, kullanıcı tonu duymasa da metni duymalı.
+    """
+    try:
+        audio.play(dictation.tone(name, config))
+    except (dictation.DictationError, audio.AudioError, OSError) as exc:
+        typer.secho(
+            _("İşaret sesi çalınamadı: {error}").format(error=exc),
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+
+
 @contextlib.contextmanager
-def _stoppable(enabled: bool):
-    """Çalma süresince süreci `pakize stop` ile durdurulabilir kılar.
+def _stoppable(
+    enabled: bool,
+    text: str | None = None,
+    on_queued: Callable[[], None] | None = None,
+):
+    """Çalmayı okuma sırasına sokar ve süreci `pakize stop` ile durdurulabilir kılar.
+
+    Süreç önce kayda girer, sonra önündekiler bitene kadar bekler; gövde
+    ancak sıra gelince çalışır. `text` verilmişse sırada daha önde aynı metin
+    varken `_DuplicateText` yükseltilir ve gövde hiç çalışmaz. `on_queued`
+    sıraya girildiği an, beklemeden önce çağrılır ("alındı" tonu için).
 
     Sinyal geldiğinde önce çalan ses kesilir, sonra `KeyboardInterrupt`
     yükseltilir; böylece Ctrl+C ile `pakize stop` aynı yoldan ilerler ve
-    arkada üretilmeye devam eden parçalar da iptal olur.
+    arkada üretilmeye devam eden parçalar da iptal olur. Beklerken gelen
+    sinyal de aynı yoldan çıkar ve kayıt `finally` ile düşer.
     """
     if not enabled:
         yield
@@ -1143,11 +1183,17 @@ def _stoppable(enabled: bool):
         sig: signal.signal(sig, handler)
         for sig in (signal.SIGTERM, signal.SIGINT)
     }
-    runtime.register(os.getpid())
+    pid = os.getpid()
+    runtime.register(pid, text=text)
     try:
+        if text is not None and runtime.earlier_duplicate(pid):
+            raise _DuplicateText
+        if on_queued is not None:
+            on_queued()
+        runtime.wait_for_turn(pid)
         yield
     finally:
-        runtime.clear(os.getpid())
+        runtime.clear(pid)
         for sig, previous in previous_handlers.items():
             signal.signal(sig, previous)
 
