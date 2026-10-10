@@ -566,10 +566,10 @@ def stop() -> None:
 def skip() -> None:
     """Çalan seslendirmeyi keser; sıradaki başlar.
 
-    Yalnızca kilidi tutan, yani çalan süreç sonlandırılır; bekleyen ilk okuma
-    kilidi alıp kendiliğinden başlar.
+    Yalnızca sıranın başındaki, yani çalan süreç sonlandırılır; bekleyen ilk
+    okuma sıranın başına geçip kendiliğinden başlar.
     """
-    target = runtime.playing_pid()
+    target = runtime.running_pid()
     if target is None:
         typer.secho(_("Çalan bir seslendirme yok."), fg=typer.colors.YELLOW)
         raise typer.Exit(code=1)
@@ -1174,11 +1174,11 @@ def _stoppable(
 ):
     """Çalmayı okuma sırasına sokar ve süreci `pakize stop` ile durdurulabilir kılar.
 
-    Süreç önce kayda girer, sonra sıranın başına gelip çalma kilidini alana
-    kadar bekler; gövde ancak o zaman çalışır. `text` verilmişse sırada daha
-    önde ya da kilidi tutan kayıtta aynı metin varken `_DuplicateText`
-    yükseltilir ve gövde hiç çalışmaz. `on_queued` sıraya girildiği an,
-    beklemeden önce çağrılır ("alındı" tonu için).
+    Süreç önce kayda girer, sonra önündekiler bitene kadar bekler; gövde
+    ancak sıra gelince çalışır. `text` verilmişse ve sırada aynı metin zaten
+    varsa kayıt geri alınır, `_DuplicateText` yükseltilir ve gövde hiç
+    çalışmaz. `on_queued` sıraya girildiği an, beklemeden önce çağrılır
+    ("alındı" tonu için).
 
     Sinyal geldiğinde önce çalan ses kesilir, sonra `KeyboardInterrupt`
     yükseltilir; böylece Ctrl+C ile `pakize stop` aynı yoldan ilerler ve
@@ -1198,16 +1198,14 @@ def _stoppable(
         for sig in (signal.SIGTERM, signal.SIGINT)
     }
     pid = os.getpid()
-    runtime.register(pid, text=text)
     try:
-        if text is not None and runtime.earlier_duplicate(pid):
+        if not runtime.register(pid, text=text):
             raise _DuplicateText
         if on_queued is not None:
             on_queued()
         runtime.wait_for_turn(pid)
         yield
     finally:
-        runtime.release_lock(pid)
         runtime.clear(pid)
         for sig, previous in previous_handlers.items():
             signal.signal(sig, previous)

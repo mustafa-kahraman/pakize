@@ -468,28 +468,32 @@ def test_farkli_metin_siraya_girer(kuyruk, tonlar):
     assert len(kuyruk["uretilen"]) == 1
 
 
-@pytest.mark.parametrize(
-    ("bizim_pid", "kalan"),
-    [(2222, "öndeki"), (ONDEKI_PID - 1, "biz")],
-    ids=["arkadaki-gider", "ondeki-kalir"],
-)
-def test_ayni_anda_basilan_tekrarda_sonuc_belirli(kuyruk, tonlar, monkeypatch, bizim_pid, kalan):
-    """İki basış aynı zaman damgasını alsa da küçük pid kalır, diğeri çekilir."""
+def test_ayni_anda_basilan_tekrarda_ilk_kaydolan_kalir(kuyruk, tonlar, monkeypatch):
+    """İki basış aynı damgayı alsa ve bizim pid küçük olsa da ilk kaydolan kalır."""
     monkeypatch.setattr(cli.runtime.time, "time_ns", lambda: 500)
-    monkeypatch.setattr(cli.os, "getpid", lambda: bizim_pid)
+    monkeypatch.setattr(cli.os, "getpid", lambda: ONDEKI_PID - 1)
     cli.runtime.register(ONDEKI_PID, text="Merhaba.\n")
 
     sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
 
     assert sonuc.exit_code == 0
-    if kalan == "öndeki":
-        assert tonlar == ["duplicate"]
-        assert kuyruk["uretilen"] == []
-        assert cli.runtime.running_pids() == [ONDEKI_PID]
-    else:
-        assert tonlar == ["accept"]
-        assert len(kuyruk["uretilen"]) == 1
-        assert cli.runtime.running_pids() == [ONDEKI_PID]
+    assert tonlar == ["duplicate"]
+    assert kuyruk["uretilen"] == []
+    assert cli.runtime.running_pids() == [ONDEKI_PID]
+
+
+def test_kayit_sirasinda_durdurulan_surec_130_ile_cikar_kayit_birakmaz(kuyruk, monkeypatch):
+    def kes():
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli.runtime.time, "time_ns", kes)
+
+    sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
+
+    assert sonuc.exit_code == 130
+    assert "Durduruldu." in sonuc.stdout
+    assert kuyruk["uretilen"] == []
+    assert list(cli.runtime.state_dir().iterdir()) == []
 
 
 def test_beklerken_durdurulan_surec_130_ile_cikar_kayit_birakmaz(kuyruk):
@@ -546,9 +550,9 @@ def test_dur_all_secenegi_yok():
 
 
 def test_sonraki_yalniz_calani_keser(monkeypatch):
-    """Kilidi tutan kesilir; sıra başı farklı olsa bile bekleyenlere dokunulmaz."""
+    """Sıranın başı kesilir; bekleyenlere dokunulmaz."""
     durdurulan: list[int] = []
-    monkeypatch.setattr(cli.runtime, "playing_pid", lambda: 2222)
+    monkeypatch.setattr(cli.runtime, "running_pid", lambda: 2222)
     monkeypatch.setattr(cli.runtime, "stop", lambda pid: bool(durdurulan.append(pid) or True))
 
     sonuc = runner.invoke(cli.app, ["skip"])
@@ -559,7 +563,7 @@ def test_sonraki_yalniz_calani_keser(monkeypatch):
 
 
 def test_sonraki_calan_yoksa_bilgi_verir(monkeypatch):
-    monkeypatch.setattr(cli.runtime, "playing_pid", lambda: None)
+    monkeypatch.setattr(cli.runtime, "running_pid", lambda: None)
 
     sonuc = runner.invoke(cli.app, ["skip"])
 
@@ -568,7 +572,7 @@ def test_sonraki_calan_yoksa_bilgi_verir(monkeypatch):
 
 
 def test_sonraki_surec_arada_olmusse_bilgi_verir(monkeypatch):
-    monkeypatch.setattr(cli.runtime, "playing_pid", lambda: 2222)
+    monkeypatch.setattr(cli.runtime, "running_pid", lambda: 2222)
     monkeypatch.setattr(cli.runtime, "stop", lambda pid: False)
 
     sonuc = runner.invoke(cli.app, ["skip"])
@@ -593,13 +597,13 @@ def test_kayit_silinemezse_surec_temiz_cikar_ve_kalinti_canli_sayilmaz(kuyruk, m
 
     assert sonuc.exit_code == 0
     assert len(kuyruk["uretilen"]) == 1
-    # Kayıt ve kilit yerinde kaldı...
+    # Kayıt ve kayıt kilidi yerinde kaldı...
     assert (kayit_dizini / str(os.getpid())).exists()
-    assert (kayit_dizini / cli.runtime.LOCK_NAME).exists()
-    # ...ama sahibi ölünce canlı sayılmaz, kimseyi bekletmez.
+    assert (kayit_dizini / cli.runtime.REGISTRATION_LOCK_NAME).exists()
+    # ...ama sahibi ölünce kayıt canlı sayılmaz, kimseyi bekletmez.
     monkeypatch.setattr(cli.runtime, "_is_pakize", lambda pid: False)
     assert cli.runtime.running_pids() == []
-    assert cli.runtime.playing_pid() is None
+    assert cli.runtime.running_pid() is None
 
 
 def test_duraklat_yalniz_calani_duraklatir_bekleyenler_bekler(monkeypatch):
@@ -894,7 +898,7 @@ def rate_limited(cikti_dizini, monkeypatch) -> list[Path]:
     monkeypatch.setattr(cli, "synthesize", limited_synthesize)
     monkeypatch.setattr(cli.notices, "rate_limit_notice", lambda config: notice)
     monkeypatch.setattr(cli.audio, "play", played.append)
-    monkeypatch.setattr(cli.runtime, "register", lambda pid, text=None: None)
+    monkeypatch.setattr(cli.runtime, "register", lambda pid, text=None: True)
     monkeypatch.setattr(cli.runtime, "clear", lambda pid: None)
     return played
 
@@ -1129,7 +1133,7 @@ def test_sonda_calma_basarisizsa_bildirim_gosterilir(cikti_dizini, bildirimler, 
 
     monkeypatch.setattr(cli, "synthesize", fake_synthesize)
     monkeypatch.setattr(cli.audio, "play", no_player)
-    monkeypatch.setattr(cli.runtime, "register", lambda pid, text=None: None)
+    monkeypatch.setattr(cli.runtime, "register", lambda pid, text=None: True)
     monkeypatch.setattr(cli.runtime, "clear", lambda pid: None)
 
     sonuc = runner.invoke(cli.app, ["speak", "--no-stream"], input="Merhaba.\n")
