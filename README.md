@@ -599,8 +599,9 @@ başlar hem biter:
 
 Okumalar sıraya girer: tuşa bastığın an kısa, yükselen bir "alındı" tonu
 duyarsın; çalan bir şey varsa yeni metin onun bitmesini bekler, iki okuma asla
-üst üste binmez. `skip` çalanı keser ve sıradaki hemen başlar; `stop`
-bekleyenlerle birlikte hepsini susturur. Aynı metin için tuşa ikinci kez
+üst üste binmez. Sıradaki okuma, çalan biterken arkada hazırlanır; çalan
+bitince beklemeden başlar. `skip` çalanı keser ve sıradaki hemen başlar;
+`stop` bekleyenlerle birlikte hepsini susturur. Aynı metin için tuşa ikinci kez
 basarsan tek, pes bir ton duyarsın ve o basış yok sayılır.
 
 ### Linux (GNOME)
@@ -755,8 +756,9 @@ seçer, kısayol ise ev dizininde çalışır. Bağlamak istersen komuta
 Bu komutlar `pakize replay` ile başlattığın çalmayı da yönetir.
 
 Birden çok seslendirme başlattıysan (iki ayrı terminalden ya da tuşa art arda
-basarak) sıraya girerler ve teker teker çalar. `skip` ve `pause` çalana
-bakar; `stop` bekleyenleri de bitirir:
+basarak) sıraya girerler ve teker teker çalar; sıradaki okuma, çalan biterken
+arkada hazırlanır. `skip` ve `pause` çalana bakar; `stop` hazırlananlar dahil
+bekleyenleri de bitirir:
 
 ```
 $ pakize stop

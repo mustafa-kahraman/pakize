@@ -616,9 +616,10 @@ the same key:
 
 Readings are queued: the moment you press the key you hear a short rising
 "accepted" tone; if something is already playing, the new text waits for it to
-finish, so two readings never overlap. `skip` cuts the current one and the
-next in line starts right away; `stop` silences everything, including what is
-waiting. Press the key a second time for the same text and you hear a single
+finish, so two readings never overlap. The next reading in line is prepared in
+the background while the current one is still playing, so it starts without a
+gap. `skip` cuts the current one and the next in line starts right away;
+`stop` silences everything, including what is waiting. Press the key a second time for the same text and you hear a single
 low tone instead: that press is ignored.
 
 ### Linux (GNOME)
@@ -777,8 +778,9 @@ it, add `--session /path/session.jsonl` to the command.
 These commands also manage playback you started with `pakize replay`.
 
 If you start several narrations (from two different terminals, or by pressing
-the key repeatedly) they queue up and play one at a time. `skip` and `pause`
-act on the one playing; `stop` also ends the ones waiting:
+the key repeatedly) they queue up and play one at a time; the next in line is
+prepared in the background while the current one plays. `skip` and `pause`
+act on the one playing; `stop` also ends the ones waiting, prepared or not:
 
 ```
 $ pakize stop
