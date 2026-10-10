@@ -469,24 +469,29 @@ def set_config_value(key: str, raw_value: str, path: Path | None = None) -> str:
     return rendered
 
 
-REPLACEMENTS_TABLE = "asr_replacements"
+def set_replacement(
+    wrong: str,
+    right: str,
+    path: Path | None = None,
+    *,
+    table: str = "asr_replacements",
+) -> str | None:
+    """Bir değiştirme tablosuna satır yazar; anahtar varsa eski değerini döner.
 
-
-def set_replacement(wrong: str, right: str, path: Path | None = None) -> str | None:
-    """Düzeltme tablosuna bir satır yazar; anahtar varsa eski değerini döner.
-
-    Dosya yoksa açıklamalı varsayılanlarla oluşturulur; tablo yoksa dosyanın
-    sonuna açılır. Diğer satırlara dokunulmaz. Anahtar her zaman tırnaklı
-    yazılır: Türkçe harfler TOML'un çıplak anahtarında geçerli değil.
+    `table` `asr_replacements` (dikte düzeltmesi, varsayılan) ya da
+    `tts_replacements` (okunuş sözlüğü) olur. Dosya yoksa açıklamalı
+    varsayılanlarla oluşturulur; tablo yoksa dosyanın sonuna açılır. Diğer
+    satırlara dokunulmaz. Anahtar her zaman tırnaklı yazılır: Türkçe harfler
+    TOML'un çıplak anahtarında geçerli değil.
     """
     if not wrong.strip() or not right.strip():
         raise ValueError(_("Yanlış ve doğru yazım boş olamaz."))
 
     target = path or config_path()
     lines = _read_config_lines(target)
-    start, end = _table_span(lines, REPLACEMENTS_TABLE)
+    start, end = _table_span(lines, table)
     if start is None:
-        lines += ["", f"[{REPLACEMENTS_TABLE}]"]
+        lines += ["", f"[{table}]"]
         start, end = len(lines), len(lines)
 
     new_line = f"{_toml_value(wrong)} = {_toml_value(right)}"
@@ -506,13 +511,18 @@ def set_replacement(wrong: str, right: str, path: Path | None = None) -> str | N
     return None
 
 
-def remove_replacement(wrong: str, path: Path | None = None) -> bool:
-    """Düzeltme tablosundan bir satırı siler; satır yoksa False döner."""
+def remove_replacement(
+    wrong: str, path: Path | None = None, *, table: str = "asr_replacements"
+) -> bool:
+    """Bir değiştirme tablosundan satırı siler; satır yoksa False döner.
+
+    `table` için bkz. `set_replacement`.
+    """
     target = path or config_path()
     if not target.is_file():
         return False
     lines = target.read_text(encoding="utf-8").splitlines()
-    start, end = _table_span(lines, REPLACEMENTS_TABLE)
+    start, end = _table_span(lines, table)
     if start is None:
         return False
     for index in range(start, end):

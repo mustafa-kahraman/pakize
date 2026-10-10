@@ -429,3 +429,64 @@ def test_fix_remove_dosya_yoksa_false(tmp_path):
     from pakize.config import remove_replacement
 
     assert remove_replacement("x", tmp_path / "yok.toml") is False
+
+
+# --- okunuş sözlüğü: word ----------------------------------------------------
+
+
+def test_word_tts_tablosuna_yazar_asr_tablosuna_dokunmaz(tmp_path):
+    from pakize.config import set_replacement
+
+    path = tmp_path / "config.toml"
+    path.write_text('[asr_replacements]\n"rümut" = "remote"\n', encoding="utf-8")
+
+    assert set_replacement("Python", "paytın", path, table="tts_replacements") is None
+    config = load_config(path)
+
+    assert config.tts_replacements == {"Python": "paytın"}
+    assert config.asr_replacements == {"rümut": "remote"}
+
+
+def test_word_ayni_anahtari_uzerine_yazar_ve_eskisini_doner(tmp_path):
+    from pakize.config import set_replacement
+
+    path = tmp_path / "config.toml"
+    set_replacement("Python", "piton", path, table="tts_replacements")
+
+    assert set_replacement("Python", "paytın", path, table="tts_replacements") == "piton"
+    assert load_config(path).tts_replacements == {"Python": "paytın"}
+
+
+def test_word_remove_yalniz_tts_tablosundan_siler(tmp_path):
+    from pakize.config import remove_replacement
+
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[asr_replacements]\n"Python" = "python"\n\n'
+        '[tts_replacements]\n"Python" = "paytın"\n"KVKK" = "ka ve ka ka"\n',
+        encoding="utf-8",
+    )
+
+    assert remove_replacement("Python", path, table="tts_replacements") is True
+    assert remove_replacement("Python", path, table="tts_replacements") is False
+    config = load_config(path)
+
+    assert config.tts_replacements == {"KVKK": "ka ve ka ka"}
+    assert config.asr_replacements == {"Python": "python"}
+
+
+def test_fix_tts_tablosuna_dokunmaz(tmp_path):
+    from pakize.config import remove_replacement, set_replacement
+
+    path = tmp_path / "config.toml"
+    path.write_text('[tts_replacements]\n"Python" = "paytın"\n', encoding="utf-8")
+
+    set_replacement("Python", "python", path)
+    assert load_config(path).tts_replacements == {"Python": "paytın"}
+
+    assert remove_replacement("Python", path) is True
+    assert remove_replacement("Python", path) is False
+    config = load_config(path)
+
+    assert config.tts_replacements == {"Python": "paytın"}
+    assert config.asr_replacements == {}
