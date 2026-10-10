@@ -20,6 +20,7 @@ from pakize import cli, pipeline
 from pakize.config import Config, load_config, set_config_value
 from pakize.engines import EngineError, EngineUnavailable, create_engine
 from pakize.engines import antalia as antalia_modulu
+from pakize.engines import worker as worker_modulu
 from pakize.engines.antalia import AntaliaEngine
 from pakize.engines.base import TtsEngine
 
@@ -116,7 +117,15 @@ def test_kayitli_motor_antalia(config):
     assert AntaliaEngine.output_suffix == ".wav"
 
 
-def test_python_yolu_bossa_kurulum_adimlari_soylenir():
+@pytest.mark.parametrize(
+    ("windows", "yorumlayici"),
+    [(False, "bin/python"), (True, "Scripts/python.exe")],
+    ids=["posix", "windows"],
+)
+def test_python_yolu_bossa_kurulum_adimlari_soylenir(monkeypatch, windows, yorumlayici):
+    # Örnek yol sanal ortamın düzenine göre değişir; `python_example` bayrağı
+    # worker modülünden okur, test gerçek platforma bağlı kalmasın diye orası yamalanır.
+    monkeypatch.setattr(worker_modulu, "IS_WINDOWS", windows)
     engine = AntaliaEngine(Config())
 
     with pytest.raises(EngineUnavailable, match="antalia_mini_python") as hata:
@@ -125,7 +134,7 @@ def test_python_yolu_bossa_kurulum_adimlari_soylenir():
     mesaj = str(hata.value)
     for komut in KURULUM_KOMUTLARI:
         assert komut in mesaj
-    assert 'antalia_mini_python = "~/.local/share/pakize-antalia-mini/bin/python"' in mesaj
+    assert f'antalia_mini_python = "~/.local/share/pakize-antalia-mini/{yorumlayici}"' in mesaj
 
 
 def test_python_yolu_dosya_degilse_kullanilamaz(tmp_path):
