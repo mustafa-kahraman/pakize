@@ -3,7 +3,7 @@
 CLI, pano kısayolu, transkript okuyucu ve web arayüzü hepsi buradaki
 `synthesize` fonksiyonunu çağırır; iş mantığı başka hiçbir yerde tekrarlanmaz.
 
-    metin → parse_segments → apply_policy → build_chunks → motor → concat
+    metin → parse_segments → apply_policy → apply_replacements → build_chunks → motor → concat
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Awaitable, Callable
 
+from .asr.replacements import apply_replacements
 from .audio import concat
 from .chunking import build_chunks
 from .config import Config
@@ -71,6 +72,13 @@ def plan_speech(text: str, config: Config) -> Plan:
     segments = parse_segments(text)
     segments = _translate_if_needed(segments, config)
     utterances, skipped = apply_policy(segments, config)
+    # Okunuş tablosu politikadan sonra uygulanır ki atlanan linkler vb.
+    # etkilenmesin; parçalamadan önce uygulanır ki parça boyu yeni metne
+    # göre hesaplansın.
+    utterances = [
+        apply_replacements(utterance, config.tts_replacements)
+        for utterance in utterances
+    ]
     chunks = build_chunks(utterances, config.max_chunk_chars)
     return Plan(chunks=chunks, skipped=skipped)
 

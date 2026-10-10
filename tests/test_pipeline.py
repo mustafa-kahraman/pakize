@@ -109,6 +109,77 @@ def test_plan_kod_atlama_politikasina_uyar(config):
     assert "Kurulum." in metin
 
 
+def test_okunus_tablosu_butun_kelimeyi_degistirir(config):
+    config = replace(config, tts_replacements={"Python": "paytın"})
+
+    plan = pipeline.plan_speech("Python güzeldir ama Pythonic kod zordur.", config)
+    metin = "\n".join(chunk.text for chunk in plan.chunks)
+
+    assert "paytın güzeldir" in metin
+    assert "Pythonic kod" in metin
+    assert "paytınic" not in metin
+
+
+def test_okunus_tablosu_kesmeden_sonraki_eki_korur(config):
+    config = replace(config, tts_replacements={"TBMM": "te be me me"})
+
+    plan = pipeline.plan_speech("TBMM'nin kararı açıklandı.", config)
+    metin = "\n".join(chunk.text for chunk in plan.chunks)
+
+    assert "te be me me'nin kararı" in metin
+
+
+def test_okunus_tablosu_buyuk_kucuk_harfe_duyarli(config):
+    config = replace(config, tts_replacements={"Python": "paytın"})
+
+    plan = pipeline.plan_speech("python ve Python", config)
+    metin = "\n".join(chunk.text for chunk in plan.chunks)
+
+    assert "python ve paytın" in metin
+
+
+def test_okunus_tablosu_atlanan_linke_dokunmaz(config):
+    config = replace(
+        config,
+        policy={**config.policy, SegmentType.URL: Action.SKIP},
+        tts_replacements={"python": "paytın"},
+    )
+
+    plan = pipeline.plan_speech(
+        "Belge: https://docs.python.org/3/ adresinde, python ile.", config
+    )
+    metin = "\n".join(chunk.text for chunk in plan.chunks)
+
+    assert "docs.python.org" not in metin
+    assert "paytın.org" not in metin
+    assert "paytın ile" in metin
+    assert plan.skipped == {SegmentType.URL: 1}
+
+
+def test_okunus_tablosu_parcalamadan_once_uygulanir(config):
+    # Ham metin (24 karakter) tek parçaya sığar; okunuş uygulanınca 38 olur.
+    # Değiştirme parçalamadan önce yapıldığı için parça boyu yeni metne göre
+    # hesaplanır ve sınır aşılmaz.
+    config = replace(
+        config, max_chunk_chars=30, tts_replacements={"KVKK": "ka ve ka ka"}
+    )
+
+    plan = pipeline.plan_speech("KVKK kuralı. KVKK metni.", config)
+
+    assert len(plan.chunks) == 2
+    assert all(len(chunk.text) <= 30 for chunk in plan.chunks)
+    # Parça sınırı kelime arasına düşebilir; kelime dizisi üzerinden bakılır.
+    kelimeler = " ".join(" ".join(chunk.text.split()) for chunk in plan.chunks)
+    assert kelimeler == "ka ve ka ka kuralı. ka ve ka ka metni."
+
+
+def test_okunus_tablosu_bosken_plan_degismez(config):
+    plan = pipeline.plan_speech(ORNEK_METIN, config)
+    plan_tablosuz = pipeline.plan_speech(ORNEK_METIN, replace(config, tts_replacements={}))
+
+    assert plan == plan_tablosuz
+
+
 def test_synthesize_dosya_uretir(tmp_path, config, motorlar, sahte_concat):
     hedef = tmp_path / "ses.txt"
 
