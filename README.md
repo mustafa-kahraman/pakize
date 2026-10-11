@@ -412,6 +412,39 @@ son cümlesini değil.
 `--roles all` seçildiğinde araya kimin konuştuğunu belirten kısa bir ayraç
 konur ("Kullanıcı:", "Asistan:"); tek rol okunurken ayraç konmaz.
 
+### Her cevaptan sonra otomatik oku
+
+Claude Code'un `Stop` hook'u ile Claude her cevabı bitirdiğinde Pakize o cevabı
+kendiliğinden okur. `~/.claude/settings.json` dosyasına ekle (dosyada zaten
+`"hooks"` varsa `Stop`'u onun içine koy):
+
+```json
+"hooks": {
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "jq -r .transcript_path | { read -r f; pakize speak --transcript --session \"$f\" >/dev/null 2>&1; } || true",
+          "async": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+- Claude Code hook'a oturum bilgisini JSON olarak verir; `jq` oradan
+  `transcript_path`'i alır. `--session` bu yüzden var: doğru oturumun kaydı
+  okunur, çalışma dizinine göre tahmin edilmez.
+- `"async": true` Claude'u bekletmez; `>/dev/null 2>&1 … || true` sayesinde
+  Pakize'nin bir hatası Claude'u bozmaz.
+- `jq` gerekir: `sudo apt install jq`, `brew install jq` ya da
+  `winget install jqlang.jq`.
+- Art arda gelen cevaplar okuma kuyruğuna girer ve sırayla okunur. Çalanı kesmek
+  için `pakize skip`, hepsini susturmak için `pakize stop`
+  ([Diğer komutlar](#diğer-komutlar)).
+
 ## Dikte
 
 Pakize ters yönde de çalışır: konuş, tuşa bas, metin panoda. Tanıma yerel bir

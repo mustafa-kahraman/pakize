@@ -425,6 +425,39 @@ With `--roles all`, a short spoken separator marks who is talking
 ("Kullanıcı:" = user, "Asistan:" = assistant); no separator is added when
 reading a single role.
 
+### Read every answer automatically
+
+With Claude Code's `Stop` hook, Pakize reads each answer as soon as Claude
+finishes it. Add this to `~/.claude/settings.json` (if the file already has
+`"hooks"`, put `Stop` inside it):
+
+```json
+"hooks": {
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "jq -r .transcript_path | { read -r f; pakize speak --transcript --session \"$f\" >/dev/null 2>&1; } || true",
+          "async": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+- Claude Code passes the session details to the hook as JSON; `jq` picks out
+  `transcript_path`. That is why `--session` is there: the right session is
+  read instead of being guessed from the working directory.
+- `"async": true` keeps Claude from waiting; thanks to `>/dev/null 2>&1 … || true`
+  a Pakize error never breaks Claude.
+- Requires `jq`: `sudo apt install jq`, `brew install jq` or
+  `winget install jqlang.jq`.
+- Answers that arrive back to back join the playback queue and are read in
+  order. `pakize skip` cuts the current one, `pakize stop` silences them all
+  ([Other commands](#other-commands)).
+
 ## Dictation
 
 Pakize works in the other direction too: speak, press a key, the text is on
